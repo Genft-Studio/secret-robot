@@ -3,7 +3,7 @@ mod tests {
     use crate::contract::{check_permission, handle, init, query};
     use crate::expiration::Expiration;
     use crate::msg::{
-        AccessLevel, Burn, ContractStatus, HandleAnswer, HandleMsg, InitConfig, InitMsg, Mint,
+        AccessLevel, Burn, ContractStatus, HandleAnswer, HandleMsg, InitMsg, Mint,
         PostInitCallback, QueryAnswer, QueryMsg, Send, Transfer, Tx, TxAction,
     };
     use crate::receiver::Snip721ReceiveMsg;
@@ -18,101 +18,12 @@ mod tests {
     use cosmwasm_std::testing::*;
     use cosmwasm_std::{
         from_binary, to_binary, Api, Binary, BlockInfo, CanonicalAddr, Coin, CosmosMsg, Env,
-        Extern, HandleResponse, HumanAddr, InitResponse, MessageInfo, StdError, StdResult, Uint128,
-        WasmMsg,
+        HumanAddr, InitResponse, MessageInfo, Uint128, WasmMsg,
     };
     use cosmwasm_storage::ReadonlyPrefixedStorage;
     use secret_toolkit::utils::space_pad;
-    use std::any::Any;
     use std::collections::HashSet;
-
-    // Helper functions
-
-    fn init_helper_default() -> (
-        StdResult<InitResponse>,
-        Extern<MockStorage, MockApi, MockQuerier>,
-    ) {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env("instantiator", &[]);
-
-        let init_msg = InitMsg {
-            name: "sec721".to_string(),
-            symbol: "S721".to_string(),
-            admin: Some(HumanAddr("admin".to_string())),
-            entropy: "We're going to need a bigger boat".to_string(),
-            config: None,
-            post_init_callback: None,
-        };
-
-        (init(&mut deps, env, init_msg), deps)
-    }
-
-    fn init_helper_with_config(
-        public_token_supply: bool,
-        public_owner: bool,
-        enable_sealed_metadata: bool,
-        unwrapped_metadata_is_private: bool,
-        minter_may_update_metadata: bool,
-        owner_may_update_metadata: bool,
-        enable_burn: bool,
-    ) -> (
-        StdResult<InitResponse>,
-        Extern<MockStorage, MockApi, MockQuerier>,
-    ) {
-        let mut deps = mock_dependencies(20, &[]);
-
-        let env = mock_env("instantiator", &[]);
-        let init_config: InitConfig = from_binary(&Binary::from(
-            format!(
-                "{{\"public_token_supply\":{},
-            \"public_owner\":{},
-            \"enable_sealed_metadata\":{},
-            \"unwrapped_metadata_is_private\":{},
-            \"minter_may_update_metadata\":{},
-            \"owner_may_update_metadata\":{},
-            \"enable_burn\":{}}}",
-                public_token_supply,
-                public_owner,
-                enable_sealed_metadata,
-                unwrapped_metadata_is_private,
-                minter_may_update_metadata,
-                owner_may_update_metadata,
-                enable_burn
-            )
-            .as_bytes(),
-        ))
-        .unwrap();
-        let init_msg = InitMsg {
-            name: "sec721".to_string(),
-            symbol: "S721".to_string(),
-            admin: Some(HumanAddr("admin".to_string())),
-            entropy: "We're going to need a bigger boat".to_string(),
-            config: Some(init_config),
-            post_init_callback: None,
-        };
-
-        (init(&mut deps, env, init_msg), deps)
-    }
-
-    fn extract_error_msg<T: Any>(error: StdResult<T>) -> String {
-        match error {
-            Ok(_response) => panic!("Expected error, but had Ok response"),
-            Err(err) => match err {
-                StdError::GenericErr { msg, .. } => msg,
-                #[allow(non_fmt_panic)]
-                _ => panic!(format!("Unexpected error result {:?}", err)),
-            },
-        }
-    }
-
-    fn extract_log(resp: StdResult<HandleResponse>) -> String {
-        match resp {
-            Ok(response) => response.log[0].value.clone(),
-            Err(_err) => "These are not the logs you are looking for".to_string(),
-        }
-    }
-
-    // Init tests
+    use crate::unittest_helpers::{init_helper_default, extract_error_msg, init_helper_with_config};
 
     #[test]
     fn test_init_sanity() {
@@ -201,488 +112,6 @@ mod tests {
     }
 
     // Handle tests
-
-    // test batch mint
-    #[test]
-    fn test_batch_mint() {
-        let (init_result, mut deps) = init_helper_default();
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-
-        let alice = HumanAddr("alice".to_string());
-        let alice_raw = deps.api.canonical_address(&alice).unwrap();
-        let admin = HumanAddr("admin".to_string());
-        let admin_raw = deps.api.canonical_address(&admin).unwrap();
-        let pub1 = Metadata {
-            name: Some("NFT1".to_string()),
-            description: Some("pub1".to_string()),
-            image: Some("uri1".to_string()),
-        };
-        let priv2 = Metadata {
-            name: Some("NFT2".to_string()),
-            description: Some("priv2".to_string()),
-            image: Some("uri2".to_string()),
-        };
-        let mints = vec![
-            Mint {
-                token_id: None,
-                owner: Some(admin.clone()),
-                public_metadata: Some(pub1.clone()),
-                private_metadata: None,
-                memo: None,
-            },
-            Mint {
-                token_id: Some("NFT2".to_string()),
-                owner: None,
-                public_metadata: None,
-                private_metadata: Some(priv2.clone()),
-                memo: None,
-            },
-            Mint {
-                token_id: Some("NFT3".to_string()),
-                owner: Some(admin.clone()),
-                public_metadata: None,
-                private_metadata: None,
-                memo: None,
-            },
-            Mint {
-                token_id: None,
-                owner: Some(admin.clone()),
-                public_metadata: None,
-                private_metadata: None,
-                memo: Some("has id 3".to_string()),
-            },
-        ];
-
-        // test minting when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-
-        let handle_msg = HandleMsg::BatchMintNft {
-            mints: mints.clone(),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("The contract admin has temporarily disabled this action"));
-
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-
-        // sanity check
-        let handle_msg = HandleMsg::BatchMintNft {
-            mints: mints.clone(),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let minted_vec = vec![
-            "0".to_string(),
-            "NFT2".to_string(),
-            "NFT3".to_string(),
-            "3".to_string(),
-        ];
-        let handle_answer: HandleAnswer =
-            from_binary(&handle_result.unwrap().data.unwrap()).unwrap();
-        match handle_answer {
-            HandleAnswer::BatchMintNft { token_ids } => {
-                assert_eq!(token_ids, minted_vec);
-            }
-            _ => panic!("unexpected"),
-        }
-
-        // verify the tokens are in the id and index maps
-        let tokens: HashSet<String> = load(&deps.storage, TOKENS_KEY).unwrap();
-        assert_eq!(tokens.len(), 4);
-        assert!(tokens.contains("0"));
-        assert!(tokens.contains("NFT2"));
-        assert!(tokens.contains("NFT3"));
-        assert!(tokens.contains("3"));
-        let map2idx = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_INDEX, &deps.storage);
-        let index1: u32 = load(&map2idx, "0".as_bytes()).unwrap();
-        let token_key1 = index1.to_le_bytes();
-        let index2: u32 = load(&map2idx, "NFT2".as_bytes()).unwrap();
-        let token_key2 = index2.to_le_bytes();
-        let index3: u32 = load(&map2idx, "NFT3".as_bytes()).unwrap();
-        let token_key3 = index3.to_le_bytes();
-        let index4: u32 = load(&map2idx, "3".as_bytes()).unwrap();
-        let token_key4 = index4.to_le_bytes();
-        let map2id = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_ID, &deps.storage);
-        let id1: String = load(&map2id, &token_key1).unwrap();
-        assert_eq!("0".to_string(), id1);
-        let id2: String = load(&map2id, &token_key2).unwrap();
-        assert_eq!("NFT2".to_string(), id2);
-        let id3: String = load(&map2id, &token_key3).unwrap();
-        assert_eq!("NFT3".to_string(), id3);
-        let id4: String = load(&map2id, &token_key4).unwrap();
-        assert_eq!("3".to_string(), id4);
-        // verify all the token info
-        let info_store = ReadonlyPrefixedStorage::new(PREFIX_INFOS, &deps.storage);
-        let token1: Token = json_load(&info_store, &token_key1).unwrap();
-        assert_eq!(token1.owner, alice_raw);
-        assert_eq!(token1.permissions, Vec::new());
-        assert!(token1.unwrapped);
-        let token2: Token = json_load(&info_store, &token_key2).unwrap();
-        assert_eq!(token2.owner, admin_raw);
-        assert_eq!(token2.permissions, Vec::new());
-        assert!(token2.unwrapped);
-        // verify the token metadata
-        let pub_store = ReadonlyPrefixedStorage::new(PREFIX_PUB_META, &deps.storage);
-        let pub_meta1: Metadata = load(&pub_store, &token_key1).unwrap();
-        assert_eq!(pub_meta1, pub1);
-        let pub_meta2: Option<Metadata> = may_load(&pub_store, &token_key2).unwrap();
-        assert!(pub_meta2.is_none());
-        let priv_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, &deps.storage);
-        let priv_meta1: Option<Metadata> = may_load(&priv_store, &token_key1).unwrap();
-        assert!(priv_meta1.is_none());
-        let priv_meta2: Metadata = load(&priv_store, &token_key2).unwrap();
-        assert_eq!(priv_meta2, priv2);
-        // verify owner lists
-        let owned_store = ReadonlyPrefixedStorage::new(PREFIX_OWNED, &deps.storage);
-        let owned: HashSet<u32> = load(&owned_store, alice_raw.as_slice()).unwrap();
-        assert!(owned.contains(&0));
-        assert!(owned.contains(&2));
-        let owned_store = ReadonlyPrefixedStorage::new(PREFIX_OWNED, &deps.storage);
-        let owned: HashSet<u32> = load(&owned_store, admin_raw.as_slice()).unwrap();
-        assert!(owned.contains(&1));
-        assert!(owned.contains(&3));
-        // verify mint tx was logged
-        let txs = get_txs(&deps.api, &deps.storage, &admin_raw, 0, 4).unwrap();
-        assert_eq!(txs.len(), 4);
-        assert_eq!(txs[0].token_id, "3".to_string());
-        assert_eq!(
-            txs[0].action,
-            TxAction::Mint {
-                minter: admin.clone(),
-                recipient: admin,
-            }
-        );
-        assert_eq!(txs[0].memo, Some("has id 3".to_string()));
-
-        let handle_msg = HandleMsg::BatchMintNft {
-            mints: mints,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Token ID NFT2 is already in use"));
-
-        // test non-minter attempt (Modified from the reference implementation)
-        let handle_msg = HandleMsg::BatchMintNft {
-            mints: vec![
-                Mint {
-                    token_id: Some("ALICE-NFT".to_string()),
-                    owner: None,
-                    public_metadata: None,
-                    private_metadata: Some(priv2.clone()),
-                    memo: None,
-                },
-            ],
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-    }
-
-    fn init_helper_verified() -> Extern<MockStorage, MockApi, MockQuerier> {
-        let (init_result, deps) = init_helper_default();
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-        deps
-    }
-
-    // test minting when status prevents it
-    #[test]
-    fn test_mint_when_status_prevents() {
-        let mut deps = init_helper_verified();
-
-        // Disable minting
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-
-        // Mint an NFT
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: Some(HumanAddr("admin".to_string())),
-            public_metadata: Some(Metadata {
-                name: Some("MyNFT".to_string()),
-                description: None,
-                image: Some("uri".to_string()),
-            }),
-            private_metadata: None,
-            memo: None,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("The contract admin has temporarily disabled this action"));
-
-        // Re-enable minting
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-
-        // Mint an NFT
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: Some(HumanAddr("admin".to_string())),
-            public_metadata: Some(Metadata {
-                name: Some("MyNFT".to_string()),
-                description: None,
-                image: Some("uri".to_string()),
-            }),
-            private_metadata: None,
-            memo: None,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-    }
-
-    // test minting for someone else
-    #[test]
-    fn test_mint_for_someone_else() {
-        let mut deps = init_helper_verified();
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: Some(HumanAddr("alice".to_string())),
-            public_metadata: Some(Metadata {
-                name: Some("MyNFT".to_string()),
-                description: None,
-                image: Some("uri".to_string()),
-            }),
-            private_metadata: None,
-            memo: None,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("You can only mint tokens for yourself"));
-    }
-
-    // test minting existing token id
-    #[test]
-    fn test_mint_existing_token_id() {
-        let mut deps = init_helper_verified();
-
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: None,
-            public_metadata: None,
-            private_metadata: None,
-            memo: Some("First instance".to_string()),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: None,
-            public_metadata: None,
-            private_metadata: None,
-            memo: Some("Instance with duplicate id".to_string()),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Token ID MyNFT is already in use"));
-    }
-
-    // test minting without specifying recipient or id
-    #[test]
-    fn test_mint_without_specifying_recipient_or_id() {
-        let mut deps = init_helper_verified();
-
-        let handle_msg = HandleMsg::MintNft {
-            token_id: None,
-            owner: None,
-            public_metadata: Some(Metadata {
-                name: Some("AdminNFT".to_string()),
-                description: None,
-                image: None,
-            }),
-            private_metadata: None,
-            memo: Some("Admin wants his own".to_string()),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let minted_str = "0".to_string();
-        let handle_answer: HandleAnswer =
-            from_binary(&handle_result.unwrap().data.unwrap()).unwrap();
-        match handle_answer {
-            HandleAnswer::MintNft { token_id } => {
-                assert_eq!(token_id, minted_str);
-            }
-            _ => panic!("unexpected"),
-        }
-
-        // verify token is in the token list
-        let tokens: HashSet<String> = load(&deps.storage, TOKENS_KEY).unwrap();
-        assert!(tokens.contains("0"));
-        let map2idx = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_INDEX, &deps.storage);
-        let index: u32 = load(&map2idx, "0".as_bytes()).unwrap();
-        let token_key = index.to_le_bytes();
-        let map2id = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_ID, &deps.storage);
-        let id: String = load(&map2id, &token_key).unwrap();
-        assert_eq!("0".to_string(), id);
-
-        // verify token info
-        let info_store = ReadonlyPrefixedStorage::new(PREFIX_INFOS, &deps.storage);
-        let token: Token = json_load(&info_store, &token_key).unwrap();
-        let admin_raw = deps
-            .api
-            .canonical_address(&HumanAddr("admin".to_string()))
-            .unwrap();
-        assert_eq!(token.owner, admin_raw);
-        assert_eq!(token.permissions, Vec::new());
-        assert!(token.unwrapped);
-
-        // verify metadata
-        let pub_store = ReadonlyPrefixedStorage::new(PREFIX_PUB_META, &deps.storage);
-        let pub_meta: Metadata = load(&pub_store, &token_key).unwrap();
-        assert_eq!(pub_meta.name, Some("AdminNFT".to_string()));
-        assert_eq!(pub_meta.description, None);
-        assert_eq!(pub_meta.image, None);
-        let priv_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, &deps.storage);
-        let priv_meta: Option<Metadata> = may_load(&priv_store, &token_key).unwrap();
-        assert!(priv_meta.is_none());
-
-        // verify token is in the owner list
-        let owned_store = ReadonlyPrefixedStorage::new(PREFIX_OWNED, &deps.storage);
-        let owned: HashSet<u32> = load(&owned_store, admin_raw.as_slice()).unwrap();
-        assert!(owned.contains(&0));
-
-        // verify mint tx was logged
-        let txs = get_txs(&deps.api, &deps.storage, &admin_raw, 0, 10).unwrap();
-        assert_eq!(txs.len(), 1);
-        assert_eq!(txs[0].token_id, "0".to_string());
-        assert_eq!(
-            txs[0].action,
-            TxAction::Mint {
-                minter: HumanAddr("admin".to_string()),
-                recipient: HumanAddr("admin".to_string()),
-            }
-        );
-        assert_eq!(txs[0].memo, Some("Admin wants his own".to_string()));
-    }
-
-    // test minting by non-minter (everyone allowed to mint)
-    #[test]
-    fn test_mint_by_non_minter() {
-        let mut deps = init_helper_verified();
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("AlicesSecret".to_string()),
-            owner: None,
-            public_metadata: Some(Metadata {
-                name: Some("AlicesSecret".to_string()),
-                description: None,
-                image: Some("uri".to_string()),
-            }),
-            private_metadata: None,
-            memo: None,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-    }
-
-    // test minting
-    #[test]
-    fn test_mint() {
-        let mut deps = init_helper_verified();
-
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some("MyNFT".to_string()),
-            owner: Some(HumanAddr("admin".to_string())),
-            public_metadata: Some(Metadata {
-                name: Some("MyNFT".to_string()),
-                description: None,
-                image: Some("uri".to_string()),
-            }),
-            private_metadata: Some(Metadata {
-                name: Some("MyNFTpriv".to_string()),
-                description: Some("Nifty".to_string()),
-                image: Some("privuri".to_string()),
-            }),
-            memo: Some("Mint it baby!".to_string()),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let minted = extract_log(handle_result);
-        assert!(minted.contains("MyNFT"));
-
-        // verify the token is in the id and index maps
-        let tokens: HashSet<String> = load(&deps.storage, TOKENS_KEY).unwrap();
-        assert!(tokens.contains("MyNFT"));
-        let map2idx = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_INDEX, &deps.storage);
-        let index: u32 = load(&map2idx, "MyNFT".as_bytes()).unwrap();
-        let token_key = index.to_le_bytes();
-        let map2id = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_ID, &deps.storage);
-        let id: String = load(&map2id, &token_key).unwrap();
-        assert_eq!("MyNFT".to_string(), id);
-
-        // verify all the token info
-        let info_store = ReadonlyPrefixedStorage::new(PREFIX_INFOS, &deps.storage);
-        let token: Token = json_load(&info_store, &token_key).unwrap();
-        let admin_raw = deps
-            .api
-            .canonical_address(&HumanAddr("admin".to_string()))
-            .unwrap();
-        assert_eq!(token.owner, admin_raw);
-        assert_eq!(token.permissions, Vec::new());
-        assert!(token.unwrapped);
-
-        // verify the token metadata
-        let pub_store = ReadonlyPrefixedStorage::new(PREFIX_PUB_META, &deps.storage);
-        let pub_meta: Metadata = load(&pub_store, &token_key).unwrap();
-        assert_eq!(pub_meta.name, Some("MyNFT".to_string()));
-        assert_eq!(pub_meta.description, None);
-        assert_eq!(pub_meta.image, Some("uri".to_string()));
-        let priv_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, &deps.storage);
-        let priv_meta: Metadata = load(&priv_store, &token_key).unwrap();
-        assert_eq!(priv_meta.name, Some("MyNFTpriv".to_string()));
-        assert_eq!(priv_meta.description, Some("Nifty".to_string()));
-        assert_eq!(priv_meta.image, Some("privuri".to_string()));
-
-        // verify token is in owner list
-        let owned_store = ReadonlyPrefixedStorage::new(PREFIX_OWNED, &deps.storage);
-        let owned: HashSet<u32> = load(&owned_store, admin_raw.as_slice()).unwrap();
-        assert!(owned.contains(&0));
-
-        // verify mint tx was logged
-        let txs = get_txs(&deps.api, &deps.storage, &admin_raw, 0, 1).unwrap();
-        assert_eq!(txs.len(), 1);
-        assert_eq!(txs[0].token_id, "MyNFT".to_string());
-        assert_eq!(
-            txs[0].action,
-            TxAction::Mint {
-                minter: HumanAddr("admin".to_string()),
-                recipient: HumanAddr("admin".to_string()),
-            }
-        );
-        assert_eq!(txs[0].memo, Some("Mint it baby!".to_string()));
-        let tx2 = get_txs(&deps.api, &deps.storage, &admin_raw, 0, 1).unwrap();
-        assert_eq!(txs, tx2);
-    }
 
     // test updating public metadata
     #[test]
@@ -7326,7 +6755,7 @@ mod tests {
             token_id: "MyNFT".to_string(),
             msg: None,
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("alice".to_string()),
@@ -7412,7 +6841,7 @@ mod tests {
                 operator: HumanAddr("zoe".to_string()),
                 padding: None,
             })
-            .unwrap(),
+                .unwrap(),
         );
         // register david's ReceiveNft
         let handle_msg = HandleMsg::RegisterReceiveNft {
@@ -7456,7 +6885,7 @@ mod tests {
             token_id: "MyNFT".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("david".to_string()),
@@ -7573,7 +7002,7 @@ mod tests {
             token_id: "MyNFT".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_dv = space_pad(&mut msg_fr_dv.0, 256usize);
         let msg_fr_dv = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("charlie".to_string()),
@@ -7655,7 +7084,7 @@ mod tests {
             token_id: "MyNFT".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_ch = space_pad(&mut msg_fr_ch.0, 256usize);
         let msg_fr_ch = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("alice".to_string()),
@@ -8000,7 +7429,7 @@ mod tests {
                 operator: HumanAddr("zoe".to_string()),
                 padding: None,
             })
-            .unwrap(),
+                .unwrap(),
         );
         let sends = vec![
             Send {
@@ -8038,7 +7467,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("charlie".to_string()),
@@ -8053,7 +7482,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("bob".to_string()),
@@ -8189,7 +7618,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_b = space_pad(&mut msg_fr_b.0, 256usize);
         let msg_fr_b = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("charlie".to_string()),
@@ -8204,7 +7633,7 @@ mod tests {
             token_id: "NFT3".to_string(),
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("bob".to_string()),
@@ -8357,7 +7786,7 @@ mod tests {
                 operator: HumanAddr("zoe".to_string()),
                 padding: None,
             })
-            .unwrap(),
+                .unwrap(),
         );
         let handle_msg = HandleMsg::BatchSendNft {
             sends: vec![
@@ -8385,7 +7814,7 @@ mod tests {
             token_ids: vec!["NFT2".to_string(), "NFT3".to_string()],
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_al = space_pad(&mut msg_fr_al.0, 256usize);
         let msg_fr_al = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("charlie".to_string()),
@@ -8399,7 +7828,7 @@ mod tests {
             token_ids: vec!["NFT4".to_string()],
             msg: send_msg.clone(),
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_b = space_pad(&mut msf_fr_b.0, 256usize);
         let msg_fr_b = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("charlie".to_string()),
@@ -8412,7 +7841,7 @@ mod tests {
             token_id: "NFT3".to_string(),
             msg: None,
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_c3 = space_pad(&mut msg_fr_c3.0, 256usize);
         let msg_fr_c3 = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("alice".to_string()),
@@ -8425,7 +7854,7 @@ mod tests {
             token_id: "NFT4".to_string(),
             msg: None,
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_c4 = space_pad(&mut msg_fr_c4.0, 256usize);
         let msg_fr_c4 = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("alice".to_string()),
@@ -8438,7 +7867,7 @@ mod tests {
             token_id: "NFT6".to_string(),
             msg: None,
         })
-        .unwrap();
+            .unwrap();
         let msg_fr_c6 = space_pad(&mut msg_fr_c6.0, 256usize);
         let msg_fr_c6 = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: HumanAddr("alice".to_string()),
@@ -8582,7 +8011,7 @@ mod tests {
                 .unwrap()
                 .as_slice(),
         )
-        .unwrap();
+            .unwrap();
         assert_eq!(&hash, "alice code hash");
     }
 
