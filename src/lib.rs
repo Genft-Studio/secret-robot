@@ -12,6 +12,7 @@ mod unittest_handles;
 mod unittest_burn;
 mod unittest_helpers;
 mod unittest_mint;
+mod unittest_public_metadata;
 mod unittest_queries;
 mod utils;
 mod viewing_key;
