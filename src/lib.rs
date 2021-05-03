@@ -6,6 +6,7 @@ mod rand;
 pub mod receiver;
 pub mod state;
 pub mod token;
+mod unittest_batch_burn;
 mod unittest_batch_mint;
 mod unittest_handles;
 mod unittest_burn;
