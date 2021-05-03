@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::unittest_helpers::{init_helper_verified, extract_error_msg, extract_log};
+    use crate::unittest_helpers::{init_helper_verified, extract_error_msg, extract_log, set_contract_status};
     use crate::msg::{HandleMsg, ContractStatus, HandleAnswer, TxAction};
-    use crate::contract::handle;
+    use crate::contract::{handle};
     use cosmwasm_std::testing::mock_env;
     use cosmwasm_std::{HumanAddr, from_binary, Api};
     use crate::token::{Metadata, Token};
@@ -16,12 +16,7 @@ mod tests {
         let mut deps = init_helper_verified();
 
         // Disable minting
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // Mint an NFT
         let handle_msg = HandleMsg::MintNft {
@@ -41,12 +36,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // Re-enable minting
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         // Mint an NFT
         let handle_msg = HandleMsg::MintNft {

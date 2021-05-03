@@ -23,7 +23,7 @@ mod tests {
     use cosmwasm_storage::ReadonlyPrefixedStorage;
     use secret_toolkit::utils::space_pad;
     use std::collections::HashSet;
-    use crate::unittest_helpers::{init_helper_default, extract_error_msg, init_helper_with_config};
+    use crate::unittest_helpers::{init_helper_default, extract_error_msg, init_helper_with_config, set_contract_status};
 
     #[test]
     fn test_init_sanity() {
@@ -160,11 +160,7 @@ mod tests {
         assert!(error.contains("Not authorized to update metadata of token SNIP20"));
 
         // test setting metadata when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
 
         let handle_msg = HandleMsg::SetPublicMetadata {
             token_id: "MyNFT".to_string(),
@@ -179,11 +175,8 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
+
         let handle_msg = HandleMsg::MintNft {
             token_id: Some("MyNFT".to_string()),
             owner: Some(HumanAddr("alice".to_string())),
@@ -437,12 +430,7 @@ mod tests {
         let pub_meta: Option<Metadata> = may_load(&pub_store, &token_key).unwrap();
         assert!(pub_meta.is_none());
 
-        // test setting metadata when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
 
         let handle_msg = HandleMsg::SetPrivateMetadata {
             token_id: "MyNFT".to_string(),
@@ -457,11 +445,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test owner trying when not authorized
         let handle_msg = HandleMsg::SetPrivateMetadata {
@@ -568,12 +552,8 @@ mod tests {
             init_result.err().unwrap()
         );
 
-        // test reveal when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::MintNft {
             token_id: Some("MyNFT".to_string()),
             owner: Some(HumanAddr("alice".to_string())),
@@ -596,11 +576,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test sealed metadata not enabled
         let handle_msg = HandleMsg::Reveal {
@@ -816,11 +792,7 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test trying to set approval when status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
         let handle_msg = HandleMsg::SetWhitelistedApproval {
             address: HumanAddr("bob".to_string()),
             token_id: Some("NFT1".to_string()),
@@ -834,11 +806,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
         // setting approval is ok even during StopTransactions status
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // only allow the owner to use SetWhitelistedApproval
         let handle_msg = HandleMsg::SetWhitelistedApproval {
@@ -2750,11 +2718,7 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test contract status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
         let handle_msg = HandleMsg::Approve {
             spender: HumanAddr("bob".to_string()),
             token_id: "MyNFT".to_string(),
@@ -2765,11 +2729,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         // test unauthorized address attempt
         let handle_msg = HandleMsg::Approve {
@@ -3242,11 +3202,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test contract status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::Revoke {
             spender: HumanAddr("bob".to_string()),
             token_id: "MyNFT".to_string(),
@@ -3256,11 +3213,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test unauthorized address attempt
         let handle_msg = HandleMsg::Revoke {
@@ -3600,11 +3553,8 @@ mod tests {
 
         // used to test auto-setting individual token permissions when only one token
         // of many is revoked from an operator
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
+
         let handle_msg = HandleMsg::MintNft {
             token_id: Some("MyNFT2".to_string()),
             owner: Some(HumanAddr("alice".to_string())),
@@ -3764,11 +3714,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test transfer when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
+
         let handle_msg = HandleMsg::TransferNft {
             recipient: HumanAddr("bob".to_string()),
             token_id: "MyNFT".to_string(),
@@ -3779,11 +3726,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         let (init_result, mut deps) =
             init_helper_with_config(true, false, false, false, false, false, false);
@@ -4310,11 +4253,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test transfer when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
+
         let transfers = vec![Transfer {
             recipient: HumanAddr("bob".to_string()),
             token_ids: vec!["MyNFT".to_string()],
@@ -4328,11 +4268,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         let (init_result, mut deps) =
             init_helper_with_config(true, false, false, false, false, false, false);
@@ -5172,11 +5108,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test send when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
+
         let handle_msg = HandleMsg::SendNft {
             contract: HumanAddr("bob".to_string()),
             token_id: "MyNFT".to_string(),
@@ -5188,11 +5121,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         let (init_result, mut deps) =
             init_helper_with_config(true, false, false, false, false, false, false);
@@ -5825,11 +5754,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test send when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
+
         let sends = vec![Send {
             contract: HumanAddr("bob".to_string()),
             token_ids: vec!["MyNFT".to_string()],
@@ -5844,11 +5770,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::Normal);
 
         let (init_result, mut deps) =
             init_helper_with_config(true, false, false, false, false, false, false);
@@ -6636,11 +6558,8 @@ mod tests {
         );
 
         // test register when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::RegisterReceiveNft {
             code_hash: "alice code hash".to_string(),
             also_implements_batch_receive_nft: None,
@@ -6651,11 +6570,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still register when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // sanity check
         let handle_msg = HandleMsg::RegisterReceiveNft {
@@ -6687,11 +6602,8 @@ mod tests {
         );
 
         // test creating a key when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::CreateViewingKey {
             entropy: "blah".to_string(),
             padding: None,
@@ -6701,11 +6613,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still create a key when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let handle_msg = HandleMsg::CreateViewingKey {
             entropy: "blah".to_string(),
@@ -6744,11 +6652,8 @@ mod tests {
         );
 
         // test setting a key when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::SetViewingKey {
             key: "blah".to_string(),
             padding: None,
@@ -6758,11 +6663,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still set a key when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let handle_msg = HandleMsg::SetViewingKey {
             key: "blah".to_string(),
@@ -6790,11 +6691,8 @@ mod tests {
         );
 
         // test adding minters when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let minters = vec![
             HumanAddr("alice".to_string()),
             HumanAddr("bob".to_string()),
@@ -6810,11 +6708,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still add minters when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test non admin trying to add minters
         let handle_msg = HandleMsg::AddMinters {
@@ -6882,11 +6776,8 @@ mod tests {
         );
 
         // test removing minters when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let minters = vec![
             HumanAddr("alice".to_string()),
             HumanAddr("bob".to_string()),
@@ -6902,11 +6793,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still remove minters when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test non admin trying to remove minters
         let handle_msg = HandleMsg::RemoveMinters {
@@ -7006,11 +6893,8 @@ mod tests {
         );
 
         // test setting minters when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let minters = vec![
             HumanAddr("alice".to_string()),
             HumanAddr("bob".to_string()),
@@ -7027,11 +6911,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still set minters when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test non admin trying to set minters
         let handle_msg = HandleMsg::SetMinters {
@@ -7091,11 +6971,8 @@ mod tests {
         );
 
         // test changing admin when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::ChangeAdmin {
             address: HumanAddr("alice".to_string()),
             padding: None,
@@ -7105,11 +6982,7 @@ mod tests {
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still change admin when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // test non admin trying to change admin
         let handle_msg = HandleMsg::ChangeAdmin {
@@ -7170,12 +7043,14 @@ mod tests {
         // verify current status is normal
         let config: Config = load(&deps.storage, CONFIG_KEY).unwrap();
         assert_eq!(config.status, ContractStatus::Normal.to_u8());
+
         // change it to StopAll
         let handle_msg = HandleMsg::SetContractStatus {
             level: ContractStatus::StopAll,
             padding: None,
         };
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+
         // verify status was changed
         let config: Config = load(&deps.storage, CONFIG_KEY).unwrap();
         assert_eq!(config.status, ContractStatus::StopAll.to_u8());
@@ -7220,11 +7095,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test trying to ApproveAll when status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::ApproveAll {
             operator: HumanAddr("bob".to_string()),
             expires: None,
@@ -7233,12 +7105,9 @@ mod tests {
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
+
         // setting approval is ok even during StopTransactions status
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let bob_raw = deps
             .api
@@ -7429,11 +7298,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test trying to RevokeAll when status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::RevokeAll {
             operator: HumanAddr("bob".to_string()),
             padding: None,
@@ -7441,12 +7307,9 @@ mod tests {
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
+
         // setting approval is ok even during StopTransactions status
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let bob_raw = deps
             .api
@@ -7644,22 +7507,15 @@ mod tests {
         );
 
         // test setting privacy when status prevents it
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::MakeOwnershipPrivate { padding: None };
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
         // you can still set privacy when transactions are stopped
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // sanity check when contract default is private
         let handle_msg = HandleMsg::MakeOwnershipPrivate { padding: None };
@@ -7746,11 +7602,8 @@ mod tests {
         let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
 
         // test trying to set approval when status does not allow
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopAll,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopAll);
+
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: Some("NFT1".to_string()),
             view_owner: Some(AccessLevel::All),
@@ -7761,12 +7614,9 @@ mod tests {
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
+
         // setting approval is ok even during StopTransactions status
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         // only allow the owner to use SetGlobalApproval
         let handle_msg = HandleMsg::SetGlobalApproval {

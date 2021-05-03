@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
+    use crate::unittest_helpers::{init_helper_with_config, extract_error_msg, set_contract_status};
     use crate::msg::{HandleMsg, ContractStatus, TxAction};
     use cosmwasm_std::{HumanAddr, Env, BlockInfo, MessageInfo, Api};
     use crate::token::{Metadata, Token};
-    use crate::contract::handle;
+    use crate::contract::{handle};
     use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
     use crate::expiration::Expiration;
     use std::collections::HashSet;
@@ -668,12 +668,7 @@ mod tests {
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         assert!(handle_result.is_ok());
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let handle_msg = HandleMsg::BurnNft {
             token_id: "MyNFT".to_string(),
@@ -684,11 +679,6 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::Normal);
     }
 }

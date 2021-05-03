@@ -1,4 +1,4 @@
-use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
+use crate::unittest_helpers::{init_helper_with_config, extract_error_msg, set_contract_status};
 use crate::msg::{HandleMsg, ContractStatus, AccessLevel, Burn, TxAction};
 use cosmwasm_std::{HumanAddr, Api, Extern};
 use crate::contract::handle;
@@ -599,11 +599,3 @@ fn mint_nft8_charlie(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>) {
     assert!(handle_result.is_ok());
 }
 
-fn set_contract_status(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, status: ContractStatus) {
-    let handle_msg = HandleMsg::SetContractStatus {
-        level: status,
-        padding: None,
-    };
-    let result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-    assert!(result.is_ok());
-}

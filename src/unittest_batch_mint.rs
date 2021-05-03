@@ -1,26 +1,21 @@
 #[cfg(test)]
 mod tests {
     use crate::msg::{HandleMsg, ContractStatus, Mint, HandleAnswer, TxAction};
-    use crate::contract::handle;
+    use crate::contract::{handle};
     use cosmwasm_std::testing::mock_env;
     use cosmwasm_std::{HumanAddr, from_binary, Api};
     use crate::token::{Metadata, Token};
     use std::collections::HashSet;
     use crate::state::{load, TOKENS_KEY, PREFIX_MAP_TO_INDEX, PREFIX_MAP_TO_ID, PREFIX_INFOS, json_load, PREFIX_PUB_META, may_load, PREFIX_PRIV_META, PREFIX_OWNED, get_txs};
     use cosmwasm_storage::ReadonlyPrefixedStorage;
-    use crate::unittest_helpers::{init_helper_verified, extract_error_msg};
+    use crate::unittest_helpers::{init_helper_verified, extract_error_msg, set_contract_status};
 
     // test batch mint when status prevents it
     #[test]
     fn test_batch_mint_when_suspended() {
         let mut deps = init_helper_verified();
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::StopTransactions,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::StopTransactions);
 
         let mints = vec![
             Mint {
@@ -40,19 +35,7 @@ mod tests {
         let error = extract_error_msg(handle_result);
         assert!(error.contains("The contract admin has temporarily disabled this action"));
 
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
-
-        let handle_msg = HandleMsg::SetContractStatus {
-            level: ContractStatus::Normal,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        assert!(handle_result.is_ok());
+        set_contract_status(&mut deps, ContractStatus::Normal);
     }
 
     #[test]

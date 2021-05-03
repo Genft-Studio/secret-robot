@@ -1,7 +1,7 @@
 use cosmwasm_std::testing::{MockQuerier, MockApi, MockStorage, mock_dependencies, mock_env};
 use cosmwasm_std::{StdResult, InitResponse, Extern, HumanAddr, from_binary, StdError, HandleResponse, Binary};
-use crate::msg::{InitMsg, InitConfig};
-use crate::contract::init;
+use crate::msg::{InitMsg, InitConfig, ContractStatus, HandleMsg};
+use crate::contract::{init, handle};
 use std::any::Any;
 
 pub fn init_helper_default() -> (
@@ -96,4 +96,13 @@ pub fn init_helper_verified() -> Extern<MockStorage, MockApi, MockQuerier> {
         init_result.err().unwrap()
     );
     deps
+}
+
+pub fn set_contract_status(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, status: ContractStatus) {
+    let message = HandleMsg::SetContractStatus {
+        level: status,
+        padding: None,
+    };
+    let result = handle(&mut deps, mock_env("admin", &[]), message);
+    assert!(result.is_ok());
 }
