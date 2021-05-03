@@ -15,6 +15,7 @@ mod unittest_mint;
 mod unittest_private_metadata;
 mod unittest_public_metadata;
 mod unittest_queries;
+mod unittest_reveal;
 mod utils;
 mod viewing_key;
 
