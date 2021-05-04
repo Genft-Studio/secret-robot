@@ -8,6 +8,7 @@ pub mod state;
 pub mod token;
 mod unittest_batch_burn;
 mod unittest_batch_mint;
+mod unittest_batch_transfer;
 mod unittest_handles;
 mod unittest_burn;
 mod unittest_cw721_approve;
