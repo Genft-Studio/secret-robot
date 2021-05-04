@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::init_helper_with_config;
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, QueryMsg, QueryAnswer, Cw721Approval};
+    use crate::msg::{HandleMsg, QueryMsg, QueryAnswer, Cw721Approval, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::mock_env;
     use crate::expiration::Expiration;
@@ -21,12 +21,16 @@ mod tests {
         let bob = HumanAddr("bob".to_string());
         let charlie = HumanAddr("charlie".to_string());
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let handle_msg = HandleMsg::ApproveAll {
             operator: bob.clone(),
@@ -71,7 +75,7 @@ mod tests {
         // sanity check
         let query_msg = QueryMsg::ApprovedForAll {
             owner: alice.clone(),
-            viewing_key: Some("akey".to_string()),
+            viewing_key: Some(viewing_key.clone()),
             include_expired: None,
         };
         let query_result = query(&deps, query_msg);

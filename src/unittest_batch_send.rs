@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, set_contract_status, extract_error_msg};
-    use crate::msg::{HandleMsg, ContractStatus, AccessLevel, TxAction, Mint, QueryMsg, QueryAnswer, Send, Tx};
+    use crate::msg::{HandleMsg, ContractStatus, AccessLevel, TxAction, Mint, QueryMsg, QueryAnswer, Send, Tx, HandleAnswer};
     use cosmwasm_std::{HumanAddr, Api, to_binary, CosmosMsg, WasmMsg, Binary, from_binary};
     use crate::token::{Metadata, Token};
     use crate::contract::{handle, query};
@@ -807,25 +807,33 @@ mod tests {
         });
         let expected_msgs = vec![msg_fr_al, msg_fr_b, msg_fr_c3, msg_fr_c4, msg_fr_c6];
         assert_eq!(messages, expected_msgs);
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "ckey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "ckey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("charlie", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let charlie_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         // confirm alice's tokens
         let query_msg = QueryMsg::Tokens {
             owner: HumanAddr("alice".to_string()),
             viewer: None,
-            viewing_key: Some("akey".to_string()),
+            viewing_key: Some(alice_viewing_key.clone()),
             start_after: None,
             limit: Some(30),
         };
@@ -867,7 +875,7 @@ mod tests {
         };
         let query_msg = QueryMsg::TransactionHistory {
             address: HumanAddr("alice".to_string()),
-            viewing_key: "akey".to_string(),
+            viewing_key: alice_viewing_key.clone(),
             page: None,
             page_size: None,
         };
@@ -883,7 +891,7 @@ mod tests {
         let query_msg = QueryMsg::Tokens {
             owner: HumanAddr("charlie".to_string()),
             viewer: None,
-            viewing_key: Some("ckey".to_string()),
+            viewing_key: Some(charlie_viewing_key.clone()),
             start_after: None,
             limit: Some(30),
         };

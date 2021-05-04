@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
-    use crate::msg::{HandleMsg, QueryMsg, ViewerInfo, QueryAnswer};
+    use crate::msg::{HandleMsg, QueryMsg, ViewerInfo, QueryAnswer, HandleAnswer};
     use cosmwasm_std::{HumanAddr, from_binary};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::{mock_env};
@@ -63,11 +63,22 @@ mod tests {
         assert!(error.contains("Wrong viewing key for this address or viewing key not set"));
 
         // test valid minter, valid key only return first two
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "key".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "key".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
+
+        let viewer = ViewerInfo {
+            address: alice.clone(),
+            viewing_key: alice_viewing_key.clone(),
+        };
+
         let query_msg = QueryMsg::AllTokens {
             viewer: Some(viewer.clone()),
             start_after: None,
@@ -105,7 +116,7 @@ mod tests {
 
         let viewer = ViewerInfo {
             address: alice.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: alice_viewing_key.clone(),
         };
         let query_msg = QueryMsg::AllTokens {
             viewer: Some(viewer.clone()),

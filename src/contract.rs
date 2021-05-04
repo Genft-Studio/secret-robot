@@ -1221,22 +1221,13 @@ pub fn create_key<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `key` - String to be used as the viewing key
 pub fn set_key<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &Config,
-    priority: u8,
-    key: String,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &Config,
+    _priority: u8,
+    _key: String,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let vk = ViewingKey(key.clone());
-    let message_sender = deps.api.canonical_address(&env.message.sender)?;
-    let mut key_store = PrefixedStorage::new(PREFIX_VIEW_KEY, &mut deps.storage);
-    save(&mut key_store, message_sender.as_slice(), &vk.to_hashed())?;
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::ViewingKey { key })?),
-    })
+    return Err(StdError::generic_err("Viewing keys cannot be set, they must be generated"));
 }
 
 /// Returns HandleResult

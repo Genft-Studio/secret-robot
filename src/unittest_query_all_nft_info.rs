@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, mint_generic_token};
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo};
+    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::mock_env;
     use crate::token::Metadata;
@@ -19,12 +19,16 @@ mod tests {
         );
         let alice = HumanAddr("alice".to_string());
         let bob = HumanAddr("bob".to_string());
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let public_meta = Metadata {
             name: Some("Name1".to_string()),
@@ -91,7 +95,7 @@ mod tests {
             token_id: "NFT2".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "akey".to_string(),
+                viewing_key: alice_viewing_key.clone(),
             }),
             include_expired: None,
         };

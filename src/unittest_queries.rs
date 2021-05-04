@@ -4,10 +4,7 @@ mod tests {
 
     use crate::contract::{handle, query};
     use crate::expiration::Expiration;
-    use crate::msg::{
-        AccessLevel, HandleMsg, QueryAnswer, QueryMsg,
-        Snip721Approval, Tx, TxAction
-    };
+    use crate::msg::{AccessLevel, HandleMsg, QueryAnswer, QueryMsg, Snip721Approval, Tx, TxAction, HandleAnswer};
     use cosmwasm_std::testing::*;
     use cosmwasm_std::{
         from_binary, BlockInfo, Env, HumanAddr, MessageInfo,
@@ -28,11 +25,17 @@ mod tests {
         let alice = HumanAddr("alice".to_string());
         let bob = HumanAddr("bob".to_string());
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
+
 
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: None,
@@ -66,7 +69,7 @@ mod tests {
         // and private metadata is public for all tokens
         let query_msg = QueryMsg::InventoryApprovals {
             address: alice.clone(),
-            viewing_key: "akey".to_string(),
+            viewing_key: alice_viewing_key.clone(),
             include_expired: Some(true),
         };
         let query_result = query(&deps, query_msg);
@@ -99,11 +102,17 @@ mod tests {
             init_result.err().unwrap()
         );
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
+
         let handle_msg = HandleMsg::SetWhitelistedApproval {
             address: bob.clone(),
             token_id: Some("NFT1".to_string()),
@@ -163,7 +172,7 @@ mod tests {
         // test owner makes ownership public for all tokens
         let query_msg = QueryMsg::InventoryApprovals {
             address: alice.clone(),
-            viewing_key: "akey".to_string(),
+            viewing_key: alice_viewing_key.clone(),
             include_expired: Some(true),
         };
         let query_result = query(&deps, query_msg);
@@ -202,22 +211,32 @@ mod tests {
 
         let admin = HumanAddr("admin".to_string());
         let alice = HumanAddr("alice".to_string());
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "key".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "key".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let admin_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         // test no txs yet
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: admin_viewing_key.clone(),
             page: None,
             page_size: None,
         };
@@ -306,7 +325,7 @@ mod tests {
         // sanity check for all txs
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: admin_viewing_key.clone(),
             page: None,
             page_size: None,
         };
@@ -325,7 +344,7 @@ mod tests {
         // test paginating so only see last 2
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: admin_viewing_key.clone(),
             page: None,
             page_size: Some(2),
         };
@@ -341,7 +360,7 @@ mod tests {
         // test paginating so only see 3rd one
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: admin_viewing_key.clone(),
             page: Some(2),
             page_size: Some(1),
         };
@@ -357,7 +376,7 @@ mod tests {
         // test tx was logged to all participants
         let query_msg = QueryMsg::TransactionHistory {
             address: alice.clone(),
-            viewing_key: "akey".to_string(),
+            viewing_key: alice_viewing_key.clone(),
             page: None,
             page_size: None,
         };

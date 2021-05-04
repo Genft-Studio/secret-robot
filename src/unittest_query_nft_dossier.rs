@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
-    use crate::msg::{QueryMsg, HandleMsg, AccessLevel, QueryAnswer, ViewerInfo, Snip721Approval};
+    use crate::msg::{QueryMsg, HandleMsg, AccessLevel, QueryAnswer, ViewerInfo, Snip721Approval, HandleAnswer};
     use crate::contract::{query, handle};
     use crate::token::Metadata;
     use cosmwasm_std::{HumanAddr, Env, BlockInfo, MessageInfo, from_binary};
@@ -354,16 +354,20 @@ mod tests {
         }
 
         // test owner is the viewer including expired
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "key".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "key".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let viewer = ViewerInfo {
             address: alice.clone(),
-            viewing_key: "key".to_string(),
+            viewing_key: alice_viewing_key.clone(),
         };
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: Some("NFT1".to_string()),
@@ -530,19 +534,27 @@ mod tests {
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         assert!(result.is_ok());
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "key".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "key".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let alice_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "ckey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "ckey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("charlie", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let charlie_viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let handle_msg = HandleMsg::SetWhitelistedApproval {
             address: charlie.clone(),
@@ -592,7 +604,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "key".to_string(),
+                viewing_key: alice_viewing_key.clone(),
             }),
             include_expired: None,
         };
@@ -642,7 +654,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: charlie.clone(),
-                viewing_key: "ckey".to_string(),
+                viewing_key: charlie_viewing_key.clone(),
             }),
             include_expired: None,
         };

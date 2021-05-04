@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, mint_generic_token};
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer};
+    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::mock_env;
 
@@ -22,11 +22,16 @@ mod tests {
         let charlie = HumanAddr("charlie".to_string());
         let david = HumanAddr("david".to_string());
 
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "ckey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "ckey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("charlie", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("charlie", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let viewing_key = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let nft1 = "NFT1".to_string();
         let nft2 = "NFT2".to_string();
@@ -98,7 +103,7 @@ mod tests {
         let query_msg = QueryMsg::VerifyTransferApproval {
             token_ids: vec![nft1.clone(), nft2.clone(), nft3.clone(), nft4.clone()],
             address: charlie.clone(),
-            viewing_key: "ckey".to_string(),
+            viewing_key: viewing_key.clone(),
         };
         let query_result = query(&deps, query_msg);
         let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
@@ -123,7 +128,7 @@ mod tests {
                 nft4.clone(),
             ],
             address: charlie.clone(),
-            viewing_key: "ckey".to_string(),
+            viewing_key: viewing_key.clone(),
         };
         let query_result = query(&deps, query_msg);
         let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
@@ -148,7 +153,7 @@ mod tests {
                 nft5.clone(),
             ],
             address: charlie.clone(),
-            viewing_key: "ckey".to_string(),
+            viewing_key: viewing_key.clone(),
         };
         let query_result = query(&deps, query_msg);
         let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();

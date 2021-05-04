@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, mint_generic_token, extract_error_msg};
-    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo, Cw721Approval};
+    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo, Cw721Approval, HandleAnswer};
     use cosmwasm_std::{HumanAddr, from_binary, Extern, Env, BlockInfo, MessageInfo};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::{mock_env, MockStorage, MOCK_CONTRACT_ADDR, MockApi, MockQuerier};
@@ -22,10 +22,6 @@ mod tests {
 
         let alice = HumanAddr("alice".to_string());
         let bob = HumanAddr("bob".to_string());
-
-        set_viewing_key(&mut deps, "akey", "alice");
-        set_viewing_key(&mut deps, "bkey", "bob");
-        set_viewing_key(&mut deps, "ckey", "charlie");
 
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: Some("NFT1".to_string()),
@@ -79,9 +75,9 @@ mod tests {
         let bob = HumanAddr("bob".to_string());
         let charlie = HumanAddr("charlie".to_string());
 
-        set_viewing_key(&mut deps, "akey", "alice");
-        set_viewing_key(&mut deps, "bkey", "bob");
-        set_viewing_key(&mut deps, "ckey", "charlie");
+        let akey = set_viewing_key(&mut deps, "akey", "alice");
+        let _bkey = set_viewing_key(&mut deps, "bkey", "bob");
+        let ckey = set_viewing_key(&mut deps, "ckey", "charlie");
 
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: Some("NFT1".to_string()),
@@ -110,7 +106,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: charlie.clone(),
-                viewing_key: "ckey".to_string(),
+                viewing_key: ckey.clone(),
             }),
             include_expired: None,
         };
@@ -139,7 +135,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: charlie.clone(),
-                viewing_key: "ckey".to_string(),
+                viewing_key: ckey.clone(),
             }),
             include_expired: None,
         };
@@ -168,7 +164,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: charlie.clone(),
-                viewing_key: "ckey".to_string(),
+                viewing_key: ckey.clone(),
             }),
             include_expired: None,
         };
@@ -231,7 +227,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "akey".to_string(),
+                viewing_key: akey.clone(),
             }),
             include_expired: Some(true),
         };
@@ -251,7 +247,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "akey".to_string(),
+                viewing_key: akey.clone(),
             }),
             include_expired: None,
         };
@@ -266,12 +262,16 @@ mod tests {
         }
     }
 
-    fn set_viewing_key(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, key: &str, owner: &str) {
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: key.to_string(),
+    fn set_viewing_key(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, key: &str, owner: &str) -> String {
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: key.to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env(owner.to_string(), &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        }
     }
 }

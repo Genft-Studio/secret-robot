@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, mint_generic_token};
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, QueryMsg, QueryAnswer, AccessLevel};
+    use crate::msg::{HandleMsg, QueryMsg, QueryAnswer, AccessLevel, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::{mock_env};
 
@@ -18,16 +18,27 @@ mod tests {
         );
         let alice = HumanAddr("alice".to_string());
         let bob = HumanAddr("bob".to_string());
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "bkey".to_string(),
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let akey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
+
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "bkey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let bkey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         mint_generic_token(&mut deps, "NFT1");
         mint_generic_token(&mut deps, "NFT2");
@@ -119,7 +130,7 @@ mod tests {
         let query_msg = QueryMsg::Tokens {
             owner: alice.clone(),
             viewer: Some(bob.clone()),
-            viewing_key: Some("bkey".to_string()),
+            viewing_key: Some(bkey.clone()),
             start_after: None,
             limit: None,
         };
@@ -137,7 +148,7 @@ mod tests {
         let query_msg = QueryMsg::Tokens {
             owner: alice.clone(),
             viewer: None,
-            viewing_key: Some("akey".to_string()),
+            viewing_key: Some(akey.clone()),
             start_after: None,
             limit: Some(3),
         };
@@ -153,7 +164,7 @@ mod tests {
         let query_msg = QueryMsg::Tokens {
             owner: alice.clone(),
             viewer: None,
-            viewing_key: Some("akey".to_string()),
+            viewing_key: Some(akey.clone()),
             start_after: Some("NFT34".to_string()),
             limit: Some(30),
         };

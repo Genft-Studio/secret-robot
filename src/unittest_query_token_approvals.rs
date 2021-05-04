@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg, mint_generic_token};
     use cosmwasm_std::{HumanAddr, Env, BlockInfo, MessageInfo, from_binary};
-    use crate::msg::{QueryMsg, HandleMsg, AccessLevel, Snip721Approval, QueryAnswer};
+    use crate::msg::{QueryMsg, HandleMsg, AccessLevel, Snip721Approval, QueryAnswer, HandleAnswer};
     use crate::contract::{query, handle};
     use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
     use crate::expiration::Expiration;
@@ -37,17 +37,21 @@ mod tests {
             "Init failed: {}",
             init_result.err().unwrap()
         );
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
         let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let akey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         // test token not found when supply is private
         let query_msg = QueryMsg::TokenApprovals {
             token_id: "NFT1".to_string(),
-            viewing_key: "akey".to_string(),
+            viewing_key: akey.clone(),
             include_expired: None,
         };
         let query_result = query(&deps, query_msg);
@@ -120,7 +124,7 @@ mod tests {
         // and private meta is public on the token
         let query_msg = QueryMsg::TokenApprovals {
             token_id: "NFT1".to_string(),
-            viewing_key: "akey".to_string(),
+            viewing_key: akey.clone(),
             include_expired: Some(true),
         };
         let query_result = query(&deps, query_msg);
@@ -181,7 +185,7 @@ mod tests {
         // and private meta is public for all of alice's tokens
         let query_msg = QueryMsg::TokenApprovals {
             token_id: "NFT1".to_string(),
-            viewing_key: "akey".to_string(),
+            viewing_key: akey.clone(),
             include_expired: Some(true),
         };
         let query_result = query(&deps, query_msg);
@@ -241,7 +245,7 @@ mod tests {
         // test all of alice's tokens have public ownership
         let query_msg = QueryMsg::TokenApprovals {
             token_id: "NFT1".to_string(),
-            viewing_key: "akey".to_string(),
+            viewing_key: akey.clone(),
             include_expired: Some(true),
         };
         let query_result = query(&deps, query_msg);

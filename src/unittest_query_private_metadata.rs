@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo};
+    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::mock_env;
     use crate::token::Metadata;
@@ -18,11 +18,16 @@ mod tests {
             init_result.err().unwrap()
         );
         let alice = HumanAddr("alice".to_string());
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let _akey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let private_meta = Metadata {
             name: Some("Name1".to_string()),
@@ -106,16 +111,27 @@ mod tests {
         );
         let alice = HumanAddr("alice".to_string());
         let bob = HumanAddr("bob".to_string());
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "akey".to_string(),
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "akey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "bkey".to_string(),
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let akey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
+
+        let handle_msg = HandleMsg::CreateViewingKey {
+            entropy: "bkey".to_string(),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        let bkey = match answer {
+            HandleAnswer::ViewingKey { key } => key,
+            _ => panic!("NOPE"),
+        };
 
         let private_meta = Metadata {
             name: Some("Name1".to_string()),
@@ -138,7 +154,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "akey".to_string(),
+                viewing_key: akey.clone(),
             }),
         };
         let query_result = query(&deps, query_msg);
@@ -158,7 +174,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: alice.clone(),
-                viewing_key: "akey".to_string(),
+                viewing_key: akey.clone(),
             }),
         };
         let query_result = query(&deps, query_msg);
@@ -181,7 +197,7 @@ mod tests {
             token_id: "NFT1".to_string(),
             viewer: Some(ViewerInfo {
                 address: bob.clone(),
-                viewing_key: "bkey".to_string(),
+                viewing_key: bkey.clone(),
             }),
         };
         let query_result = query(&deps, query_msg);
