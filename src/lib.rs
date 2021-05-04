@@ -20,6 +20,7 @@ mod unittest_public_metadata;
 mod unittest_queries;
 mod unittest_reveal;
 mod unittest_transfer;
+mod unittest_send;
 mod unittest_whitelisted_approval;
 mod utils;
 mod viewing_key;
