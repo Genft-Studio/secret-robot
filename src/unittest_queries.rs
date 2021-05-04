@@ -1,98 +1,19 @@
 #[cfg(test)]
 mod tests {
-    use crate::contract::{handle, init, query};
+    //TODO Split me
+
+    use crate::contract::{handle, query};
     use crate::expiration::Expiration;
     use crate::msg::{
-        AccessLevel, Cw721Approval, HandleMsg, InitConfig, InitMsg, QueryAnswer, QueryMsg,
+        AccessLevel, Cw721Approval, HandleMsg, QueryAnswer, QueryMsg,
         Snip721Approval, Tx, TxAction, ViewerInfo,
     };
     use crate::token::Metadata;
     use cosmwasm_std::testing::*;
     use cosmwasm_std::{
-        from_binary, Binary, BlockInfo, Env, Extern, HumanAddr, InitResponse, MessageInfo,
-        StdError, StdResult,
+        from_binary, BlockInfo, Env, HumanAddr, MessageInfo,
     };
-
-    use std::any::Any;
-
-    // Helper functions
-
-    fn init_helper_default() -> (
-        StdResult<InitResponse>,
-        Extern<MockStorage, MockApi, MockQuerier>,
-    ) {
-        let mut deps = mock_dependencies(20, &[]);
-        let env = mock_env("instantiator", &[]);
-
-        let init_msg = InitMsg {
-            name: "sec721".to_string(),
-            symbol: "S721".to_string(),
-            admin: Some(HumanAddr("admin".to_string())),
-            entropy: "We're going to need a bigger boat".to_string(),
-            config: None,
-            post_init_callback: None,
-        };
-
-        (init(&mut deps, env, init_msg), deps)
-    }
-
-    fn init_helper_with_config(
-        public_token_supply: bool,
-        public_owner: bool,
-        enable_sealed_metadata: bool,
-        unwrapped_metadata_is_private: bool,
-        minter_may_update_metadata: bool,
-        owner_may_update_metadata: bool,
-        enable_burn: bool,
-    ) -> (
-        StdResult<InitResponse>,
-        Extern<MockStorage, MockApi, MockQuerier>,
-    ) {
-        let mut deps = mock_dependencies(20, &[]);
-
-        let env = mock_env("instantiator", &[]);
-        let init_config: InitConfig = from_binary(&Binary::from(
-            format!(
-                "{{\"public_token_supply\":{},
-            \"public_owner\":{},
-            \"enable_sealed_metadata\":{},
-            \"unwrapped_metadata_is_private\":{},
-            \"minter_may_update_metadata\":{},
-            \"owner_may_update_metadata\":{},
-            \"enable_burn\":{}}}",
-                public_token_supply,
-                public_owner,
-                enable_sealed_metadata,
-                unwrapped_metadata_is_private,
-                minter_may_update_metadata,
-                owner_may_update_metadata,
-                enable_burn
-            )
-            .as_bytes(),
-        ))
-        .unwrap();
-        let init_msg = InitMsg {
-            name: "sec721".to_string(),
-            symbol: "S721".to_string(),
-            admin: Some(HumanAddr("admin".to_string())),
-            entropy: "We're going to need a bigger boat".to_string(),
-            config: Some(init_config),
-            post_init_callback: None,
-        };
-
-        (init(&mut deps, env, init_msg), deps)
-    }
-
-    fn extract_error_msg<T: Any>(error: StdResult<T>) -> String {
-        match error {
-            Ok(_response) => panic!("Expected error, but had Ok response"),
-            Err(err) => match err {
-                StdError::GenericErr { msg, .. } => msg,
-                #[allow(non_fmt_panic)]
-                _ => panic!(format!("Unexpected error result {:?}", err)),
-            },
-        }
-    }
+    use crate::unittest_helpers::{extract_error_msg, init_helper_default, init_helper_with_config};
 
     // test ContractInfo query
     #[test]
