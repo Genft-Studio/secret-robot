@@ -16,6 +16,7 @@ mod unittest_cw721_approve;
 mod unittest_cw721_revoke;
 mod unittest_helpers;
 mod unittest_mint;
+mod unittest_minters;
 mod unittest_private_metadata;
 mod unittest_public_metadata;
 mod unittest_queries;
