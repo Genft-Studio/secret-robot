@@ -409,17 +409,16 @@ pub fn mint<S: Storage, A: Api, Q: Querier>(
     memo: Option<String>,
 ) -> HandleResult {
     check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let minters: Vec<CanonicalAddr> =
-        may_load(&deps.storage, MINTERS_KEY)?.unwrap_or_else(Vec::new);
-    if !minters.contains(&sender_raw) {
-        return Err(StdError::generic_err(
-            "Only designated minters are allowed to mint",
-        ));
-    }
+    let verified_owner = if owner.is_none() || owner.as_ref().unwrap() == &env.message.sender {
+        env.message.sender.clone()
+    } else {
+        return Err(StdError::generic_err("You can only mint tokens for yourself"))
+    };
+    let sender_human = &env.message.sender;
+    let sender_raw = deps.api.canonical_address(sender_human)?;
     let mut mints = vec![Mint {
         token_id,
-        owner,
+        owner: Some(verified_owner),
         public_metadata,
         private_metadata,
         memo,
@@ -455,13 +454,6 @@ pub fn batch_mint<S: Storage, A: Api, Q: Querier>(
 ) -> HandleResult {
     check_status(config.status, priority)?;
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let minters: Vec<CanonicalAddr> =
-        may_load(&deps.storage, MINTERS_KEY)?.unwrap_or_else(Vec::new);
-    if !minters.contains(&sender_raw) {
-        return Err(StdError::generic_err(
-            "Only designated minters are allowed to mint",
-        ));
-    }
     let minted = mint_list(deps, &env.block, config, &sender_raw, mints)?;
     Ok(HandleResponse {
         messages: vec![],
@@ -3913,6 +3905,7 @@ fn mint_list<S: Storage, A: Api, Q: Querier>(
         may_load(&deps.storage, TOKENS_KEY)?.unwrap_or_else(HashSet::new);
     let mut inventories: Vec<Inventory> = Vec::new();
     let mut minted: Vec<String> = Vec::new();
+    let sender_human = deps.api.human_address(sender_raw).unwrap();
     for mint in mints.drain(..) {
         let id = mint.token_id.unwrap_or(format!("{}", config.mint_cnt));
         if tokens.contains(&id) {
@@ -3921,10 +3914,10 @@ fn mint_list<S: Storage, A: Api, Q: Querier>(
                 id
             )));
         }
-        let recipient = if let Some(o) = mint.owner {
-            deps.api.canonical_address(&o)?
-        } else {
+        let recipient = if mint.owner.is_none() || mint.owner.unwrap() == sender_human {
             sender_raw.clone()
+        } else {
+            return Err(StdError::generic_err("You can only mint tokens for yourself"));
         };
 
         // if you are modifying the base contract to include other data fields on-chain in
