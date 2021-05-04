@@ -10,7 +10,7 @@ mod tests {
         json_load, load, may_load, AuthList, Config, Permission,
         PermissionType, CONFIG_KEY, MINTERS_KEY, PREFIX_ALL_PERMISSIONS, PREFIX_AUTHLIST,
         PREFIX_INFOS, PREFIX_OWNER_PRIV,
-        PREFIX_PRIV_META, PREFIX_PUB_META, PREFIX_RECEIVERS, PREFIX_VIEW_KEY,
+        PREFIX_PRIV_META, PREFIX_PUB_META, PREFIX_VIEW_KEY,
     };
     use crate::token::{Metadata, Token};
     use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
@@ -110,49 +110,6 @@ mod tests {
 
     // Handle tests
 
-    // test register receive_nft
-    #[test]
-    fn test_register_receive_nft() {
-        let (init_result, mut deps) = init_helper_default();
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-
-        // test register when status prevents it
-        set_contract_status(&mut deps, ContractStatus::StopAll);
-
-        let handle_msg = HandleMsg::RegisterReceiveNft {
-            code_hash: "alice code hash".to_string(),
-            also_implements_batch_receive_nft: None,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("The contract admin has temporarily disabled this action"));
-
-        // you can still register when transactions are stopped
-        set_contract_status(&mut deps, ContractStatus::StopTransactions);
-
-        // sanity check
-        let handle_msg = HandleMsg::RegisterReceiveNft {
-            code_hash: "alice code hash".to_string(),
-            also_implements_batch_receive_nft: None,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let store = ReadonlyPrefixedStorage::new(PREFIX_RECEIVERS, &deps.storage);
-        let hash: String = load(
-            &store,
-            deps.api
-                .canonical_address(&HumanAddr("alice".to_string()))
-                .unwrap()
-                .as_slice(),
-        )
-            .unwrap();
-        assert_eq!(&hash, "alice code hash");
-    }
 
     // test create viewing key
     #[test]
