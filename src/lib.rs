@@ -10,6 +10,7 @@ mod unittest_batch_burn;
 mod unittest_batch_mint;
 mod unittest_handles;
 mod unittest_burn;
+mod unittest_cw721_approve;
 mod unittest_helpers;
 mod unittest_mint;
 mod unittest_private_metadata;
