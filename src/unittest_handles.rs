@@ -3,20 +3,19 @@ mod tests {
     use crate::contract::{check_permission, handle, init};
     use crate::expiration::Expiration;
     use crate::msg::{
-        AccessLevel, ContractStatus, HandleAnswer, HandleMsg, InitMsg,
+        AccessLevel, ContractStatus, HandleMsg, InitMsg,
         PostInitCallback,
     };
     use crate::state::{
         json_load, load, may_load, AuthList, Config, Permission,
         PermissionType, CONFIG_KEY, MINTERS_KEY, PREFIX_ALL_PERMISSIONS, PREFIX_AUTHLIST,
         PREFIX_INFOS, PREFIX_OWNER_PRIV,
-        PREFIX_PRIV_META, PREFIX_PUB_META, PREFIX_VIEW_KEY,
+        PREFIX_PRIV_META, PREFIX_PUB_META,
     };
     use crate::token::{Metadata, Token};
-    use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
     use cosmwasm_std::testing::*;
     use cosmwasm_std::{
-        from_binary, to_binary, Api, Binary, BlockInfo, CanonicalAddr, Coin, CosmosMsg,
+        to_binary, Api, Binary, BlockInfo, CanonicalAddr, Coin, CosmosMsg,
         HumanAddr, InitResponse, Uint128, WasmMsg,
     };
     use cosmwasm_storage::ReadonlyPrefixedStorage;
@@ -110,95 +109,6 @@ mod tests {
 
     // Handle tests
 
-
-    // test create viewing key
-    #[test]
-    fn test_create_viewing_key() {
-        let (init_result, mut deps) = init_helper_default();
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-
-        // test creating a key when status prevents it
-        set_contract_status(&mut deps, ContractStatus::StopAll);
-
-        let handle_msg = HandleMsg::CreateViewingKey {
-            entropy: "blah".to_string(),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("The contract admin has temporarily disabled this action"));
-
-        // you can still create a key when transactions are stopped
-        set_contract_status(&mut deps, ContractStatus::StopTransactions);
-
-        let handle_msg = HandleMsg::CreateViewingKey {
-            entropy: "blah".to_string(),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(
-            handle_result.is_ok(),
-            "handle() failed: {}",
-            handle_result.err().unwrap()
-        );
-        let answer: HandleAnswer = from_binary(&handle_result.unwrap().data.unwrap()).unwrap();
-
-        let key_str = match answer {
-            HandleAnswer::ViewingKey { key } => key,
-            _ => panic!("NOPE"),
-        };
-        let key = ViewingKey(key_str);
-        let alice_raw = deps
-            .api
-            .canonical_address(&HumanAddr("alice".to_string()))
-            .unwrap();
-        let key_store = ReadonlyPrefixedStorage::new(PREFIX_VIEW_KEY, &deps.storage);
-        let saved_vk: [u8; VIEWING_KEY_SIZE] = load(&key_store, alice_raw.as_slice()).unwrap();
-        assert!(key.check_viewing_key(&saved_vk));
-    }
-
-    // test set viewing key
-    #[test]
-    fn test_set_viewing_key() {
-        let (init_result, mut deps) = init_helper_default();
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-
-        // test setting a key when status prevents it
-        set_contract_status(&mut deps, ContractStatus::StopAll);
-
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "blah".to_string(),
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("The contract admin has temporarily disabled this action"));
-
-        // you can still set a key when transactions are stopped
-        set_contract_status(&mut deps, ContractStatus::StopTransactions);
-
-        let handle_msg = HandleMsg::SetViewingKey {
-            key: "blah".to_string(),
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let key = ViewingKey("blah".to_string());
-        let alice_raw = deps
-            .api
-            .canonical_address(&HumanAddr("alice".to_string()))
-            .unwrap();
-        let key_store = ReadonlyPrefixedStorage::new(PREFIX_VIEW_KEY, &deps.storage);
-        let saved_vk: [u8; VIEWING_KEY_SIZE] = load(&key_store, alice_raw.as_slice()).unwrap();
-        assert!(key.check_viewing_key(&saved_vk));
-    }
 
     // test add minters
     #[test]

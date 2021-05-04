@@ -23,6 +23,7 @@ mod unittest_reveal;
 mod unittest_transfer;
 mod unittest_register_receive_nft;
 mod unittest_send;
+mod unittest_viewing_key;
 mod unittest_whitelisted_approval;
 mod utils;
 mod viewing_key;
