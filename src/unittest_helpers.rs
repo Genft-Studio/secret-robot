@@ -341,3 +341,17 @@ pub fn mint_nft8_charlie(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier
     let handle_result = handle(&mut deps, mock_env("charlie", &[]), handle_msg);
     assert!(handle_result.is_ok());
 }
+
+
+pub fn mint_generic_token(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, token_id: &str) {
+    let handle_msg = HandleMsg::MintNft {
+        token_id: Some(token_id.to_string()),
+        owner: Some(HumanAddr("alice".to_string())),
+        public_metadata: None,
+        private_metadata: None,
+        memo: None,
+        padding: None,
+    };
+    let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+    assert!(result.is_ok());
+}

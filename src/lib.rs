@@ -34,6 +34,7 @@ mod unittest_query_all_tokens;
 mod unittest_query_nft_dossier;
 mod unittest_query_num_tokens;
 mod unittest_query_tokens;
+mod unittest_query_unwrapped;
 mod unittest_register_receive_nft;
 mod unittest_send;
 mod unittest_set_global_approval;

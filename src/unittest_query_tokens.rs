@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests {
-    use crate::unittest_helpers::init_helper_with_config;
-    use cosmwasm_std::{HumanAddr, from_binary, Extern};
+    use crate::unittest_helpers::{init_helper_with_config, mint_generic_token};
+    use cosmwasm_std::{HumanAddr, from_binary};
     use crate::msg::{HandleMsg, QueryMsg, QueryAnswer, AccessLevel};
     use crate::contract::{handle, query};
-    use cosmwasm_std::testing::{mock_env, MockStorage, MockApi, MockQuerier};
+    use cosmwasm_std::testing::{mock_env};
 
     // test Tokens query
     #[test]
@@ -29,12 +29,12 @@ mod tests {
         };
         let _handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
 
-        mint_token(&mut deps, "NFT1");
-        mint_token(&mut deps, "NFT2");
-        mint_token(&mut deps, "NFT3");
-        mint_token(&mut deps, "NFT4");
-        mint_token(&mut deps, "NFT5");
-        mint_token(&mut deps, "NFT6");
+        mint_generic_token(&mut deps, "NFT1");
+        mint_generic_token(&mut deps, "NFT2");
+        mint_generic_token(&mut deps, "NFT3");
+        mint_generic_token(&mut deps, "NFT4");
+        mint_generic_token(&mut deps, "NFT5");
+        mint_generic_token(&mut deps, "NFT6");
 
         // test contract has public ownership
         let query_msg = QueryMsg::Tokens {
@@ -201,18 +201,5 @@ mod tests {
             }
             _ => panic!("unexpected"),
         }
-    }
-
-    fn mint_token(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>, token_id: &str) {
-        let handle_msg = HandleMsg::MintNft {
-            token_id: Some(token_id.to_string()),
-            owner: Some(HumanAddr("alice".to_string())),
-            public_metadata: None,
-            private_metadata: None,
-            memo: None,
-            padding: None,
-        };
-        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        assert!(result.is_ok());
     }
 }
