@@ -320,11 +320,11 @@
         "burn_nft": {
           "type": "object",
           "required": [
-            "status"
+            "secret"
           ],
           "properties": {
-            "status": {
-              "$ref": "#/definitions/ResponseStatus"
+            "secret": {
+              "$ref": "#/definitions/TokenData"
             }
           }
         }
@@ -491,6 +491,35 @@
         "success",
         "failure"
       ]
+    },
+    "TokenData": {
+      "type": "object",
+      "required": [
+        "token_id"
+      ],
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_id": {
+          "type": "string"
+        }
+      }
     }
   }
 }

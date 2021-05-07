@@ -23,7 +23,6 @@ use crate::state::{
 };
 use crate::token::{Metadata, Token};
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
-use crate::unittest_helpers::extract_error_msg;
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -3361,9 +3360,9 @@ fn burn_list<S: Storage, A: Api, Q: Querier>(
                 &token_id,
             );
 
-            if private_metadata.is_err() {
-                panic!("{}", extract_error_msg(private_metadata))
-            }
+            // if private_metadata.is_err() {
+            //     panic!("{}", private_metadata.err())
+            // }
 
             token_data.update_with_private_metadata(private_metadata.unwrap());
             retrieved_data.push(token_data);
