@@ -256,7 +256,9 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        assert!(result.is_ok());
+
         let handle_msg = HandleMsg::MintNft {
             token_id: Some("NFT2".to_string()),
             owner: None,
@@ -265,20 +267,16 @@ mod tests {
             memo: Some("Mint 2".to_string()),
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let handle_msg = HandleMsg::TransferNft {
-            token_id: "NFT1".to_string(),
-            recipient: alice.clone(),
-            memo: None,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        assert!(result.is_ok());
+
         let handle_msg = HandleMsg::BurnNft {
             token_id: "NFT2".to_string(),
             memo: None,
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        assert!(result.is_ok());
 
         let mint1 = Tx {
             tx_id: 0,
@@ -300,25 +298,14 @@ mod tests {
                 recipient: admin.clone(),
             },
         };
-        let xfer1 = Tx {
-            tx_id: 2,
-            blockheight: 12345,
-            token_id: "NFT1".to_string(),
-            memo: None,
-            action: TxAction::Transfer {
-                from: admin.clone(),
-                sender: None,
-                recipient: alice.clone(),
-            },
-        };
         let burn2 = Tx {
-            tx_id: 3,
+            tx_id: 2,
             blockheight: 12345,
             token_id: "NFT2".to_string(),
             memo: None,
             action: TxAction::Burn {
                 owner: admin.clone(),
-                burner: None,
+                burner: Some(alice.clone()),
             },
         };
 
@@ -335,33 +322,33 @@ mod tests {
             QueryAnswer::TransactionHistory { txs } => {
                 assert_eq!(
                     txs,
-                    vec![burn2.clone(), xfer1.clone(), mint2.clone(), mint1.clone()]
+                    vec![burn2.clone(), mint2.clone(), mint1.clone()]
                 );
             }
             _ => panic!("unexpected"),
         }
 
-        // test paginating so only see last 2
+        // test paginating so only see last 1
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
             viewing_key: admin_viewing_key.clone(),
             page: None,
-            page_size: Some(2),
+            page_size: Some(1),
         };
         let query_result = query(&deps, query_msg);
         let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
         match query_answer {
             QueryAnswer::TransactionHistory { txs } => {
-                assert_eq!(txs, vec![burn2.clone(), xfer1.clone()]);
+                assert_eq!(txs, vec![burn2.clone()]);
             }
             _ => panic!("unexpected"),
         }
 
-        // test paginating so only see 3rd one
+        // test paginating so only see 2nd one
         let query_msg = QueryMsg::TransactionHistory {
             address: admin.clone(),
             viewing_key: admin_viewing_key.clone(),
-            page: Some(2),
+            page: Some(1),
             page_size: Some(1),
         };
         let query_result = query(&deps, query_msg);
@@ -384,7 +371,7 @@ mod tests {
         let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
         match query_answer {
             QueryAnswer::TransactionHistory { txs } => {
-                assert_eq!(txs, vec![xfer1.clone()]);
+                assert_eq!(txs, vec![burn2.clone()]);
             }
             _ => panic!("unexpected"),
         }
@@ -393,7 +380,7 @@ mod tests {
     // test RegisteredCodeHash query
     #[test]
     fn test_query_registered_code_hash() {
-        let (init_result, mut deps) =
+        let (init_result, deps) =
             init_helper_with_config(false, true, true, false, true, false, true);
         assert!(
             init_result.is_ok(),
@@ -401,7 +388,6 @@ mod tests {
             init_result.err().unwrap()
         );
 
-        // test not registered
         let query_msg = QueryMsg::RegisteredCodeHash {
             contract: HumanAddr("alice".to_string()),
         };
@@ -418,52 +404,5 @@ mod tests {
             _ => panic!("unexpected"),
         }
 
-        let handle_msg = HandleMsg::RegisterReceiveNft {
-            code_hash: "Code Hash".to_string(),
-            also_implements_batch_receive_nft: None,
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-
-        // sanity check with default for implements BatchReceiveNft
-        let query_msg = QueryMsg::RegisteredCodeHash {
-            contract: HumanAddr("alice".to_string()),
-        };
-        let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::RegisteredCodeHash {
-                code_hash,
-                also_implements_batch_receive_nft,
-            } => {
-                assert_eq!(code_hash, Some("Code Hash".to_string()));
-                assert!(!also_implements_batch_receive_nft)
-            }
-            _ => panic!("unexpected"),
-        }
-
-        // sanity check with implementing BatchRegisterReceive
-        let handle_msg = HandleMsg::RegisterReceiveNft {
-            code_hash: "Code Hash".to_string(),
-            also_implements_batch_receive_nft: Some(true),
-            padding: None,
-        };
-        let _handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
-
-        let query_msg = QueryMsg::RegisteredCodeHash {
-            contract: HumanAddr("bob".to_string()),
-        };
-        let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::RegisteredCodeHash {
-                code_hash,
-                also_implements_batch_receive_nft,
-            } => {
-                assert_eq!(code_hash, Some("Code Hash".to_string()));
-                assert!(also_implements_batch_receive_nft)
-            }
-            _ => panic!("unexpected"),
-        }
     }
 }

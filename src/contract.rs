@@ -12,22 +12,18 @@ use cosmwasm_storage::{PrefixedStorage, ReadonlyPrefixedStorage};
 use secret_toolkit::utils::{pad_handle_result, pad_query_result};
 
 use crate::expiration::Expiration;
-use crate::msg::{
-    AccessLevel, Burn, ContractStatus, Cw721Approval, Cw721OwnerOfResponse, HandleAnswer,
-    HandleMsg, InitMsg, Mint, QueryAnswer, QueryMsg, ResponseStatus::Success, Send,
-    Snip721Approval, Transfer, ViewerInfo,
-};
+use crate::msg::{AccessLevel, Burn, ContractStatus, Cw721Approval, Cw721OwnerOfResponse, HandleAnswer, HandleMsg, InitMsg, Mint, QueryAnswer, QueryMsg, ResponseStatus::Success, Send, Snip721Approval, Transfer, ViewerInfo, TokenData};
 use crate::rand::sha_256;
-use crate::receiver::{batch_receive_nft_msg, receive_nft_msg};
 use crate::state::{
     get_txs, json_may_load, json_save, load, may_load, remove, save, store_burn, store_mint,
-    store_transfer, AuthList, Config, Permission, PermissionType, ReceiveRegistration, BLOCK_KEY,
+    AuthList, Config, Permission, PermissionType, ReceiveRegistration, BLOCK_KEY,
     CONFIG_KEY, MINTERS_KEY, PREFIX_ALL_PERMISSIONS, PREFIX_AUTHLIST, PREFIX_INFOS,
     PREFIX_MAP_TO_ID, PREFIX_MAP_TO_INDEX, PREFIX_OWNED, PREFIX_OWNER_PRIV, PREFIX_PRIV_META,
-    PREFIX_PUB_META, PREFIX_RECEIVERS, PREFIX_VIEW_KEY, PRNG_SEED_KEY, TOKENS_KEY,
+    PREFIX_PUB_META, PREFIX_VIEW_KEY, PRNG_SEED_KEY, TOKENS_KEY,
 };
 use crate::token::{Metadata, Token};
 use crate::viewing_key::{ViewingKey, VIEWING_KEY_SIZE};
+use crate::unittest_helpers::extract_error_msg;
 
 /// pad handle responses and log attributes to blocks of 256 bytes to prevent leaking info based on
 /// response size
@@ -412,7 +408,7 @@ pub fn mint<S: Storage, A: Api, Q: Querier>(
     let verified_owner = if owner.is_none() || owner.as_ref().unwrap() == &env.message.sender {
         env.message.sender.clone()
     } else {
-        return Err(StdError::generic_err("You can only mint tokens for yourself"))
+        return Err(StdError::generic_err("You can only mint tokens for yourself"));
     };
     let sender_human = &env.message.sender;
     let sender_raw = deps.api.canonical_address(sender_human)?;
@@ -973,21 +969,18 @@ fn burn_nft<S: Storage, A: Api, Q: Querier>(
     memo: Option<String>,
 ) -> HandleResult {
     check_status(config.status, priority)?;
-    if !config.burn_is_enabled {
-        return Err(StdError::generic_err(
-            "Burn functionality is not enabled for this token",
-        ));
-    }
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
     let mut burns = vec![Burn {
         token_ids: vec![token_id],
         memo,
     }];
-    burn_list(deps, &env.block, config, &sender_raw, &mut burns)?;
+    let secrets = burn_list(deps, &env.block, config, &sender_raw, &mut burns)?;
+    let secret = secrets.first().unwrap().clone();
+
     let res = HandleResponse {
         messages: vec![],
         log: vec![],
-        data: Some(to_binary(&HandleAnswer::BurnNft { status: Success })?),
+        data: Some(to_binary(&HandleAnswer::BurnNft { secret })?),
     };
     Ok(res)
 }
@@ -1004,24 +997,13 @@ fn burn_nft<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `transfers` - list of transfers to perform
 pub fn batch_transfer_nft<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &mut Config,
-    priority: u8,
-    transfers: Vec<Transfer>,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &mut Config,
+    _priority: u8,
+    _transfers: Vec<Transfer>,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let _m = send_list(deps, &env, config, &sender_raw, Some(transfers), None)?;
-
-    let res = HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::BatchTransferNft {
-            status: Success,
-        })?),
-    };
-    Ok(res)
+    Err(StdError::generic_err("Token transfer not permitted"))
 }
 
 /// Returns HandleResult
@@ -1038,29 +1020,15 @@ pub fn batch_transfer_nft<S: Storage, A: Api, Q: Querier>(
 /// * `token_id` - token id String of token to be transferred
 /// * `memo` - optional memo for the mint tx
 pub fn transfer_nft<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &mut Config,
-    priority: u8,
-    recipient: HumanAddr,
-    token_id: String,
-    memo: Option<String>,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &mut Config,
+    _priority: u8,
+    _recipient: HumanAddr,
+    _token_id: String,
+    _memo: Option<String>,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let transfers = Some(vec![Transfer {
-        recipient,
-        token_ids: vec![token_id],
-        memo,
-    }]);
-    let _m = send_list(deps, &env, config, &sender_raw, transfers, None)?;
-
-    let res = HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::TransferNft { status: Success })?),
-    };
-    Ok(res)
+    Err(StdError::generic_err("Token transfer not permitted"))
 }
 
 /// Returns HandleResult
@@ -1076,22 +1044,13 @@ pub fn transfer_nft<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `sends` - list of SendNfts to perform
 fn batch_send_nft<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &mut Config,
-    priority: u8,
-    sends: Vec<Send>,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &mut Config,
+    _priority: u8,
+    _sends: Vec<Send>,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let messages = send_list(deps, &env, config, &sender_raw, None, Some(sends))?;
-
-    let res = HandleResponse {
-        messages,
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::BatchSendNft { status: Success })?),
-    };
-    Ok(res)
+    Err(StdError::generic_err("Token transfer not permitted"))
 }
 
 /// Returns HandleResult
@@ -1111,31 +1070,16 @@ fn batch_send_nft<S: Storage, A: Api, Q: Querier>(
 /// * `memo` - optional memo for the mint tx
 #[allow(clippy::too_many_arguments)]
 fn send_nft<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &mut Config,
-    priority: u8,
-    contract: HumanAddr,
-    token_id: String,
-    msg: Option<Binary>,
-    memo: Option<String>,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _onfig: &mut Config,
+    _riority: u8,
+    _contract: HumanAddr,
+    _token_id: String,
+    _msg: Option<Binary>,
+    _memo: Option<String>,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let sends = Some(vec![Send {
-        contract,
-        token_ids: vec![token_id],
-        msg,
-        memo,
-    }]);
-    let messages = send_list(deps, &env, config, &sender_raw, None, sends)?;
-
-    let res = HandleResponse {
-        messages,
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::SendNft { status: Success })?),
-    };
-    Ok(res)
+    Err(StdError::generic_err("Token transfer not permitted"))
 }
 
 /// Returns HandleResult
@@ -1151,29 +1095,14 @@ fn send_nft<S: Storage, A: Api, Q: Querier>(
 /// * `code_hash` - code hash String of the registering contract
 /// * `impl_batch` - optionally true if the contract also implements BatchReceiveNft
 pub fn register_receive_nft<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &Config,
-    priority: u8,
-    code_hash: String,
-    impl_batch: Option<bool>,
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &Config,
+    _priority: u8,
+    _code_hash: String,
+    _impl_batch: Option<bool>,
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    let regrec = ReceiveRegistration {
-        code_hash,
-        impl_batch: impl_batch.unwrap_or(false),
-    };
-    let mut store = PrefixedStorage::new(PREFIX_RECEIVERS, &mut deps.storage);
-    save(&mut store, sender_raw.as_slice(), &regrec)?;
-    let res = HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::RegisterReceiveNft {
-            status: Success,
-        })?),
-    };
-    Ok(res)
+    Err(StdError::generic_err("Token transfer not permitted. ReceiveNft registration not supported."))
 }
 
 /// Returns HandleResult
@@ -1242,37 +1171,13 @@ pub fn set_key<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `new_minters` - list of minter addresses to add
 pub fn add_minters<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &Config,
-    priority: u8,
-    new_minters: &[HumanAddr],
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &Config,
+    _priority: u8,
+    _new_minters: &[HumanAddr],
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    if config.admin != sender_raw {
-        return Err(StdError::generic_err(
-            "This is an admin command and can only be run from the admin address",
-        ));
-    }
-    let mut minters: Vec<CanonicalAddr> =
-        may_load(&deps.storage, MINTERS_KEY)?.unwrap_or_else(Vec::new);
-    let old_len = minters.len();
-    for minter in new_minters {
-        let minter_raw = deps.api.canonical_address(minter)?;
-        if !minters.contains(&minter_raw) {
-            minters.push(minter_raw);
-        }
-    }
-    // only save if the list changed
-    if old_len != minters.len() {
-        save(&mut deps.storage, MINTERS_KEY, &minters)?;
-    }
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::AddMinters { status: Success })?),
-    })
+    Err(StdError::generic_err("Minting is not restricted, minter list not supported"))
 }
 
 /// Returns HandleResult
@@ -1287,41 +1192,13 @@ pub fn add_minters<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `no_minters` - list of minter addresses to remove
 pub fn remove_minters<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &Config,
-    priority: u8,
-    no_minters: &[HumanAddr],
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &Config,
+    _priority: u8,
+    _no_minters: &[HumanAddr],
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    if config.admin != sender_raw {
-        return Err(StdError::generic_err(
-            "This is an admin command and can only be run from the admin address",
-        ));
-    }
-    let may_minters: Option<Vec<CanonicalAddr>> = may_load(&deps.storage, MINTERS_KEY)?;
-    if let Some(mut minters) = may_minters {
-        let old_len = minters.len();
-        let no_raw: Vec<CanonicalAddr> = no_minters
-            .iter()
-            .map(|x| deps.api.canonical_address(x))
-            .collect::<StdResult<Vec<CanonicalAddr>>>()?;
-        minters.retain(|m| !no_raw.contains(m));
-        let new_len = minters.len();
-        if new_len > 0 {
-            if old_len != new_len {
-                save(&mut deps.storage, MINTERS_KEY, &minters)?;
-            }
-        } else {
-            remove(&mut deps.storage, MINTERS_KEY);
-        }
-    }
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::RemoveMinters { status: Success })?),
-    })
+    Err(StdError::generic_err("Minting is not restricted, minter list not supported"))
 }
 
 /// Returns HandleResult
@@ -1336,41 +1213,13 @@ pub fn remove_minters<S: Storage, A: Api, Q: Querier>(
 /// * `priority` - u8 representation of highest ContractStatus level this action is permitted
 /// * `human_minters` - exact list of minter addresses
 pub fn set_minters<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    config: &Config,
-    priority: u8,
-    human_minters: &[HumanAddr],
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _config: &Config,
+    _priority: u8,
+    _human_minters: &[HumanAddr],
 ) -> HandleResult {
-    check_status(config.status, priority)?;
-    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
-    if config.admin != sender_raw {
-        return Err(StdError::generic_err(
-            "This is an admin command and can only be run from the admin address",
-        ));
-    }
-    // remove duplicates from the minters list
-    let minters_raw: Vec<CanonicalAddr> = human_minters
-        .iter()
-        .map(|x| deps.api.canonical_address(x))
-        .collect::<StdResult<Vec<CanonicalAddr>>>()?;
-    let mut sortable: Vec<&[u8]> = minters_raw.iter().map(|x| x.as_slice()).collect();
-    sortable.sort_unstable();
-    sortable.dedup();
-    let minters: Vec<CanonicalAddr> = sortable
-        .iter()
-        .map(|x| CanonicalAddr(Binary(x.to_vec())))
-        .collect();
-    if minters.is_empty() {
-        remove(&mut deps.storage, MINTERS_KEY);
-    } else {
-        save(&mut deps.storage, MINTERS_KEY, &minters)?;
-    }
-    Ok(HandleResponse {
-        messages: vec![],
-        log: vec![],
-        data: Some(to_binary(&HandleAnswer::SetMinters { status: Success })?),
-    })
+    Err(StdError::generic_err("Minting is not restricted, minter list not supported"))
 }
 
 /// Returns HandleResult
@@ -1469,7 +1318,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>, msg: QueryM
             viewer,
             include_expired,
         } => query_owner_of(deps, &token_id, viewer, include_expired),
-        QueryMsg::NftInfo { token_id } => query_nft_info(&deps.storage, &token_id),
+        QueryMsg::NftInfo { token_id: _ } => query_nft_info(),
         QueryMsg::PrivateMetadata { token_id, viewer } => {
             query_private_meta(deps, &token_id, viewer)
         }
@@ -1560,16 +1409,8 @@ pub fn query_config<S: ReadonlyStorage>(storage: &S) -> QueryResult {
 /// # Arguments
 ///
 /// * `deps` - a reference to Extern containing all the contract's external dependencies
-pub fn query_minters<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> QueryResult {
-    let minters: Vec<CanonicalAddr> =
-        may_load(&deps.storage, MINTERS_KEY)?.unwrap_or_else(Vec::new);
-
-    to_binary(&QueryAnswer::Minters {
-        minters: minters
-            .iter()
-            .map(|m| deps.api.human_address(m))
-            .collect::<StdResult<Vec<HumanAddr>>>()?,
-    })
+pub fn query_minters<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> QueryResult {
+    Err(StdError::generic_err("Minting is not restricted, minter list not supported"))
 }
 
 /// Returns QueryResult displaying the number of tokens the contract controls
@@ -1600,26 +1441,12 @@ pub fn query_num_tokens<S: Storage, A: Api, Q: Querier>(
 ///                   lexicographical order
 /// * `limit` - optional max number of tokens to display
 pub fn query_all_tokens<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    viewer: Option<ViewerInfo>,
-    start_after: Option<String>,
-    limit: Option<u32>,
+    _deps: &Extern<S, A, Q>,
+    _viewer: Option<ViewerInfo>,
+    _start_after: Option<String>,
+    _limit: Option<u32>,
 ) -> QueryResult {
-    // authenticate permission to view token supply
-    check_view_supply(deps, viewer)?;
-    let after = start_after.unwrap_or_else(String::new);
-    let size = limit.unwrap_or(300) as usize;
-    let token_list: HashSet<String> =
-        may_load(&deps.storage, TOKENS_KEY)?.unwrap_or_else(HashSet::new);
-    let mut tokens = Vec::new();
-    for id in token_list {
-        if id > after {
-            tokens.push(id.to_string());
-        }
-    }
-    tokens.sort_unstable();
-    tokens.truncate(size);
-    to_binary(&QueryAnswer::TokenList { tokens })
+    Err(StdError::generic_err("Tokens cannot be queried"))
 }
 
 /// Returns QueryResult displaying the owner of the input token if the requester is authorized
@@ -1654,7 +1481,13 @@ pub fn query_owner_of<S: Storage, A: Api, Q: Querier>(
 ///
 /// * `storage` - a reference to the contract's storage
 /// * `token_id` - string slice of the token id
-pub fn query_nft_info<S: ReadonlyStorage>(storage: &S, token_id: &str) -> QueryResult {
+pub fn query_nft_info() -> QueryResult {
+    Err(StdError::generic_err("Token must be burned to retrieve metadata."))
+}
+
+fn get_public_metadata<S: ReadonlyStorage>(
+    storage: &S, token_id: &str,
+) -> StdResult<QueryAnswer> {
     let config: Config = load(storage, CONFIG_KEY)?;
     let map2idx = ReadonlyPrefixedStorage::new(PREFIX_MAP_TO_INDEX, storage);
     let may_idx: Option<u32> = may_load(&map2idx, token_id.as_bytes())?;
@@ -1666,7 +1499,7 @@ pub fn query_nft_info<S: ReadonlyStorage>(storage: &S, token_id: &str) -> QueryR
             description: None,
             image: None,
         });
-        return to_binary(&QueryAnswer::NftInfo {
+        return Ok(QueryAnswer::NftInfo {
             name: meta.name,
             description: meta.description,
             image: meta.image,
@@ -1681,7 +1514,7 @@ pub fn query_nft_info<S: ReadonlyStorage>(storage: &S, token_id: &str) -> QueryR
         )));
     }
     // otherwise, just return empty metadata
-    to_binary(&QueryAnswer::NftInfo {
+    Ok(QueryAnswer::NftInfo {
         name: None,
         description: None,
         image: None,
@@ -1697,44 +1530,41 @@ pub fn query_nft_info<S: ReadonlyStorage>(storage: &S, token_id: &str) -> QueryR
 /// * `token_id` - string slice of the token id
 /// * `viewer` - optional address and key making an authenticated query request
 pub fn query_private_meta<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    token_id: &str,
-    viewer: Option<ViewerInfo>,
+    _deps: &Extern<S, A, Q>,
+    _token_id: &str,
+    _viewer: Option<ViewerInfo>,
 ) -> QueryResult {
-    let prep_info = query_token_prep(deps, token_id, viewer)?;
-    let opt_viewer = if prep_info.viewer_given {
-        Some(&prep_info.viewer_raw)
-    } else {
-        None
-    };
-    check_perm_core(
-        deps,
-        &prep_info.block,
-        &prep_info.token,
-        token_id,
-        opt_viewer,
-        prep_info.token.owner.as_slice(),
-        PermissionType::ViewMetadata.to_usize(),
-        &mut Vec::new(),
-        &prep_info.err_msg,
-    )?;
-    // don't display if private metadata is sealed
-    if !prep_info.token.unwrapped {
-        return Err(StdError::generic_err(
-            "Sealed metadata must be unwrapped by calling Reveal before it can be viewed",
-        ));
+    Err(StdError::generic_err("Token must be burned to retrieve metadata."))
+}
+
+fn get_private_metadata<S: ReadonlyStorage>(
+    storage: &S, token_id: &str,
+) -> StdResult<QueryAnswer> {
+    let config: Config = load(storage, CONFIG_KEY)?;
+    let (token, idx) = get_token(storage, token_id, None)?;
+
+    let meta_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, storage);
+    let meta: Option<Metadata> = may_load(&meta_store, &idx.to_le_bytes())?;
+
+    if meta.is_some() {
+        if config.sealed_metadata_is_enabled && !token.unwrapped {
+            panic!(
+                "Sealed metadata must be unwrapped by calling Reveal before it can be viewed",
+            );
+        }
+        let data = meta.unwrap();
+        return Ok(QueryAnswer::PrivateMetadata {
+            name: data.name,
+            description: data.description,
+            image: data.image,
+        })
     }
-    let meta_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, &deps.storage);
-    let meta: Metadata = may_load(&meta_store, &prep_info.idx.to_le_bytes())?.unwrap_or(Metadata {
+    Ok(QueryAnswer::PrivateMetadata {
         name: None,
         description: None,
-        image: None,
-    });
-    to_binary(&QueryAnswer::PrivateMetadata {
-        name: meta.name,
-        description: meta.description,
-        image: meta.image,
+        image: None
     })
+
 }
 
 /// Returns QueryResult displaying response of both the OwnerOf and NftInfo queries
@@ -1794,16 +1624,16 @@ pub fn query_nft_dossier<S: Storage, A: Api, Q: Querier>(
     // get the owner if permitted
     let owner = if global_pass
         || check_perm_core(
-            deps,
-            &prep_info.block,
-            &prep_info.token,
-            token_id,
-            opt_viewer,
-            owner_slice,
-            perm_type_info.view_owner_idx,
-            &mut Vec::new(),
-            &prep_info.err_msg,
-        )
+        deps,
+        &prep_info.block,
+        &prep_info.token,
+        token_id,
+        opt_viewer,
+        owner_slice,
+        perm_type_info.view_owner_idx,
+        &mut Vec::new(),
+        &prep_info.err_msg,
+    )
         .is_ok()
     {
         Some(deps.api.human_address(&prep_info.token.owner)?)
@@ -2123,7 +1953,7 @@ pub fn query_tokens<S: Storage, A: Api, Q: Querier>(
         // if the key matches the viewer address first
         if vwr_given && check_key(&deps.storage, &viewer_raw, key.clone()).is_ok() {
             is_viewer = true;
-        // check if this is the owner's key if we need to
+            // check if this is the owner's key if we need to
         } else {
             check_key(&deps.storage, &owner_raw, key)?;
             is_owner = true;
@@ -2190,7 +2020,7 @@ pub fn query_tokens<S: Storage, A: Api, Q: Querier>(
                             &mut oper_for,
                             "",
                         )
-                        .is_ok();
+                            .is_ok();
                         // if querier is found to have ALL permission, no need to check permission ever again
                         if !oper_for.is_empty() {
                             known_pass = true;
@@ -2222,12 +2052,12 @@ pub fn query_is_unwrapped<S: ReadonlyStorage>(storage: &S, token_id: &str) -> Qu
             // if the token id is not found, but token supply is private, just say
             // the token's wrapped state is the same as a newly minted token
             StdError::GenericErr { msg, .. }
-                if !config.token_supply_is_public && msg.contains("Token ID") =>
-            {
-                to_binary(&QueryAnswer::IsUnwrapped {
-                    token_is_unwrapped: !config.sealed_metadata_is_enabled,
-                })
-            }
+            if !config.token_supply_is_public && msg.contains("Token ID") =>
+                {
+                    to_binary(&QueryAnswer::IsUnwrapped {
+                        token_is_unwrapped: !config.sealed_metadata_is_enabled,
+                    })
+                }
             _ => Err(err),
         },
         Ok((token, _idx)) => to_binary(&QueryAnswer::IsUnwrapped {
@@ -2276,42 +2106,14 @@ pub fn query_transactions<S: Storage, A: Api, Q: Querier>(
 /// * `address` - a reference to the address whose transactions should be displayed
 /// * `viewing_key` - viewing key String
 pub fn query_verify_approval<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
+    _deps: &Extern<S, A, Q>,
     token_ids: &[String],
-    address: &HumanAddr,
-    viewing_key: String,
+    _address: &HumanAddr,
+    _viewing_key: String,
 ) -> StdResult<Binary> {
-    let address_raw = deps.api.canonical_address(address)?;
-    check_key(&deps.storage, &address_raw, viewing_key)?;
-    let config: Config = load(&deps.storage, CONFIG_KEY)?;
-    // TODO remove this when BlockInfo becomes available to queries
-    let block: BlockInfo = may_load(&deps.storage, BLOCK_KEY)?.unwrap_or_else(|| BlockInfo {
-        height: 1,
-        time: 1,
-        chain_id: "secret-2".to_string(),
-    });
-    let mut oper_for: Vec<CanonicalAddr> = Vec::new();
-    for id in token_ids {
-        if get_token_if_permitted(
-            deps,
-            &block,
-            id,
-            Some(&address_raw),
-            PermissionType::Transfer,
-            &mut oper_for,
-            &config,
-        )
-        .is_err()
-        {
-            return to_binary(&QueryAnswer::VerifyTransferApproval {
-                approved_for_all: false,
-                first_unapproved_token: Some(id.to_string()),
-            });
-        }
-    }
     to_binary(&QueryAnswer::VerifyTransferApproval {
-        approved_for_all: true,
-        first_unapproved_token: None,
+        approved_for_all: false,
+        first_unapproved_token: Some(token_ids.first().unwrap().to_string()),
     })
 }
 
@@ -2323,18 +2125,9 @@ pub fn query_verify_approval<S: Storage, A: Api, Q: Querier>(
 /// * `deps` - a reference to Extern containing all the contract's external dependencies
 /// * `contract` - a reference to the contract's address whose code hash is being requested
 pub fn query_code_hash<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    contract: &HumanAddr,
+    _deps: &Extern<S, A, Q>,
+    _contract: &HumanAddr,
 ) -> QueryResult {
-    let contract_raw = deps.api.canonical_address(contract)?;
-    let store = ReadonlyPrefixedStorage::new(PREFIX_RECEIVERS, &deps.storage);
-    let may_reg_rec: Option<ReceiveRegistration> = may_load(&store, contract_raw.as_slice())?;
-    if let Some(reg_rec) = may_reg_rec {
-        return to_binary(&QueryAnswer::RegisteredCodeHash {
-            code_hash: Some(reg_rec.code_hash),
-            also_implements_batch_receive_nft: reg_rec.impl_batch,
-        });
-    }
     to_binary(&QueryAnswer::RegisteredCodeHash {
         code_hash: None,
         also_implements_batch_receive_nft: false,
@@ -2441,7 +2234,7 @@ fn process_cw721_owner_of<S: Storage, A: Api, Q: Querier>(
         &prep_info.err_msg,
         prep_info.owner_is_public,
     )
-    .is_ok()
+        .is_ok()
     {
         let (owner, mut approvals, mut operators) = get_owner_of_resp(
             deps,
@@ -2584,7 +2377,7 @@ fn gen_snip721_approvals<A: Api>(
                     meta_public = Some(exp);
                 }
             }
-        // otherwise create the approval summary
+            // otherwise create the approval summary
         } else {
             let mut has_some = false;
             for i in 0..perm_type_info.num_types {
@@ -2626,10 +2419,7 @@ fn check_view_supply<S: Storage, A: Api, Q: Querier>(
     if !is_auth {
         if let Some(vwr) = viewer {
             let viewer_raw = deps.api.canonical_address(&vwr.address)?;
-            let minters: Vec<CanonicalAddr> =
-                may_load(&deps.storage, MINTERS_KEY)?.unwrap_or_else(Vec::new);
-            if minters.contains(&viewer_raw) {
-                check_key(&deps.storage, &viewer_raw, vwr.viewing_key)?;
+            if config.admin == viewer_raw {
                 is_auth = true;
             }
         }
@@ -2766,7 +2556,7 @@ fn check_perm_core<S: Storage, A: Api, Q: Querier>(
                 if let Some(exp) = perm.expirations[exp_idx] {
                     if !exp.is_expired(block) {
                         return Ok(());
-                    // if the permission is expired
+                        // if the permission is expired
                     } else {
                         // if this is the sender let them know the permission expired
                         if perm.address != global_raw {
@@ -2804,7 +2594,7 @@ fn check_perm_core<S: Storage, A: Api, Q: Querier>(
                         if !exp.is_expired(block) {
                             oper_for.push(token.owner.clone());
                             return Ok(());
-                        // if the permission expired
+                            // if the permission expired
                         } else {
                             // if this is the sender let them know the permission expired
                             if perm.address != global_raw {
@@ -2851,11 +2641,7 @@ fn check_perm_core<S: Storage, A: Api, Q: Querier>(
 /// * `config` - a reference to the Config
 fn get_token_if_permitted<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
-    block: &BlockInfo,
     token_id: &str,
-    sender: Option<&CanonicalAddr>,
-    perm_type: PermissionType,
-    oper_for: &mut Vec<CanonicalAddr>,
     config: &Config,
 ) -> StdResult<(Token, u32)> {
     let custom_err = format!(
@@ -2870,18 +2656,29 @@ fn get_token_if_permitted<S: Storage, A: Api, Q: Querier>(
         Some(&*custom_err)
     };
     let (token, idx) = get_token(&deps.storage, token_id, opt_err)?;
-    check_permission(
-        deps,
-        block,
-        &token,
-        token_id,
-        sender,
-        perm_type,
-        oper_for,
-        &custom_err,
-        config.owner_is_public,
-    )?;
-    Ok((token, idx))
+    if has_revealable_metadata(deps, &token_id).unwrap() {
+        Ok((token, idx))
+    } else {
+        Err(StdError::generic_err(format!(
+            "No revealable data was found for token {}",
+            token_id
+        )))
+    }
+}
+
+fn has_revealable_metadata<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    token_id: &str,
+) -> StdResult<bool> {
+    let prep_info = query_token_prep(deps, token_id, None)?;
+
+    let priv_store = ReadonlyPrefixedStorage::new(PREFIX_PRIV_META, &deps.storage);
+    let result = &priv_store.get(&prep_info.idx.to_le_bytes());
+    let has_private_metadata = match result {
+        Some(..) => true,
+        None => false,
+    };
+    Ok(!has_private_metadata || prep_info.token.unwrapped)
 }
 
 /// Returns StdResult<(Token, u32)>
@@ -3123,7 +2920,7 @@ fn process_accesses<S: Storage>(
                                         // if adding, don't do anything
                                         if is_approve {
                                             return Ok(());
-                                        // if revoking, throw error
+                                            // if revoking, throw error
                                         } else {
                                             return Err(StdError::generic_err(
                                                 "Can not revoke transfer permission from an existing operator",
@@ -3254,11 +3051,11 @@ fn process_accesses<S: Storage>(
             if let Some(pos) = auth_list.iter().position(|a| a.address == *address) {
                 if let Some(a) = auth_list.get_mut(pos) {
                     (a, true, pos)
-                // shouldn't ever find it but not successfully get it, so this should never happen
+                    // shouldn't ever find it but not successfully get it, so this should never happen
                 } else {
                     (&mut new_auth, false, 0usize)
                 }
-            // didn't find the address in the permission list
+                // didn't find the address in the permission list
             } else {
                 (&mut new_auth, false, 0usize)
             };
@@ -3273,7 +3070,7 @@ fn process_accesses<S: Storage>(
                 load_list.extend(owned);
                 // above, we already processed the input token, so remove it from the load list
                 load_list.remove(&proc_info.idx);
-            // just loading the tokens in the appropriate AuthList
+                // just loading the tokens in the appropriate AuthList
             } else {
                 for l in add_load_list {
                     load_list.extend(auth.tokens[l].iter());
@@ -3291,12 +3088,12 @@ fn process_accesses<S: Storage>(
                     // shouldn't ever fail this ownership check, but let's be safe
                     if load_tok.owner == *owner
                         && alter_perm_list(
-                            &mut load_tok.permissions,
-                            &alt_load_tok_perm,
-                            address,
-                            &load_all_exp,
-                            num_perm_types,
-                        )
+                        &mut load_tok.permissions,
+                        &alt_load_tok_perm,
+                        address,
+                        &load_all_exp,
+                        num_perm_types,
+                    )
                     {
                         json_save(&mut info_store, &tok_key, &load_tok)?;
                     }
@@ -3312,7 +3109,7 @@ fn process_accesses<S: Storage>(
                     auth.tokens[i].clear();
                     updated = true;
                 }
-            // else if gave permission to all individual tokens (except the input token)
+                // else if gave permission to all individual tokens (except the input token)
             } else if alt_auth_list.full[i] {
                 auth.tokens[i] = load_list.iter().copied().collect();
                 // if this was an ApproveToken done to an address with ALL permission
@@ -3321,13 +3118,13 @@ fn process_accesses<S: Storage>(
                     auth.tokens[i].push(proc_info.idx);
                 }
                 updated = true;
-            // else if just adding the input token (shouldn't need the token_given check)
+                // else if just adding the input token (shouldn't need the token_given check)
             } else if alt_auth_list.add[i] && proc_info.token_given {
                 if !auth.tokens[i].contains(&proc_info.idx) {
                     auth.tokens[i].push(proc_info.idx);
                     updated = true;
                 }
-            // else if just revoking perm on the input token (don't need the token_given check)
+                // else if just revoking perm on the input token (don't need the token_given check)
             } else if alt_auth_list.remove[i] && proc_info.token_given {
                 if let Some(tok_pos) = auth.tokens[i].iter().position(|&t| t == proc_info.idx) {
                     auth.tokens[i].swap_remove(tok_pos);
@@ -3351,11 +3148,11 @@ fn process_accesses<S: Storage>(
                     } else {
                         auth_list.swap_remove(pos);
                     }
-                // address had no previous authorization so no need to add it
+                    // address had no previous authorization so no need to add it
                 } else {
                     save_it = false;
                 }
-            // AuthList has data, so save it
+                // AuthList has data, so save it
             } else {
                 // if it is a new address, add it to the list
                 if !found {
@@ -3396,11 +3193,11 @@ fn alter_perm_list(
     let (perm, found, pos) = if let Some(pos) = perms.iter().position(|p| p.address == *address) {
         if let Some(p) = perms.get_mut(pos) {
             (p, true, pos)
-        // shouldn't ever find it but not successfully get it, so this should never happen
+            // shouldn't ever find it but not successfully get it, so this should never happen
         } else {
             (&mut new_perm, false, 0usize)
         }
-    // didn't find the address in the permission list
+        // didn't find the address in the permission list
     } else {
         (&mut new_perm, false, 0usize)
     };
@@ -3416,12 +3213,12 @@ fn alter_perm_list(
                     perm.expirations[i] = Some(expiration[i]);
                     updated = true;
                 }
-            // new permission
+                // new permission
             } else {
                 perm.expirations[i] = Some(expiration[i]);
                 updated = true;
             }
-        // otherwise if we are supposed to remove permission
+            // otherwise if we are supposed to remove permission
         } else if alter_table.remove[i] {
             // if it has permission for this type
             if perm.expirations[i].is_some() {
@@ -3436,7 +3233,7 @@ fn alter_perm_list(
         // if this address had no permissions to start
         if !found {
             perms.push(new_perm);
-        // if the last permission got revoked
+            // if the last permission got revoked
         } else if perm.expirations.iter().all(|&e| e.is_none()) {
             perms.swap_remove(pos);
         }
@@ -3450,79 +3247,6 @@ pub struct ReceiverInfo {
     pub contract: CanonicalAddr,
     // the contract's registration info
     pub registration: ReceiveRegistration,
-}
-
-/// Returns a StdResult<Vec<CosmosMsg>> list of ReceiveNft and BatchReceiveNft callacks that
-/// should be done resulting from one Send
-///
-/// # Arguments
-///
-/// * `storage` - a reference to this contract's storage
-/// * `contract_human` - a reference to the human address of the contract receiving the tokens
-/// * `contract` - a reference to the canonical address of the contract receiving the tokens
-/// * `send_from_list` - list of SendFroms containing all the owners and their tokens being sent
-/// * `msg` - a reference to the optional msg used to control ReceiveNft logic
-/// * `sender` - a reference to the address that is sending the tokens
-/// * `receivers` - a mutable reference the list of receiver contracts and their registration
-///                 info
-fn receiver_callback_msgs<S: ReadonlyStorage>(
-    storage: &S,
-    contract_human: &HumanAddr,
-    contract: &CanonicalAddr,
-    send_from_list: Vec<SendFrom>,
-    msg: &Option<Binary>,
-    sender: &HumanAddr,
-    receivers: &mut Vec<ReceiverInfo>,
-) -> StdResult<Vec<CosmosMsg>> {
-    let (code_hash, impl_batch) =
-        if let Some(receiver) = receivers.iter().find(|&r| r.contract == *contract) {
-            (
-                receiver.registration.code_hash.clone(),
-                receiver.registration.impl_batch,
-            )
-        } else {
-            let store = ReadonlyPrefixedStorage::new(PREFIX_RECEIVERS, storage);
-            let registration: ReceiveRegistration = may_load(&store, contract.as_slice())?
-                .unwrap_or(ReceiveRegistration {
-                    code_hash: String::new(),
-                    impl_batch: false,
-                });
-            let receiver = ReceiverInfo {
-                contract: contract.clone(),
-                registration: registration.clone(),
-            };
-            receivers.push(receiver);
-            (registration.code_hash, registration.impl_batch)
-        };
-    if code_hash.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut callbacks: Vec<CosmosMsg> = Vec::new();
-    for send_from in send_from_list.into_iter() {
-        // if BatchReceiveNft is implemented, use it
-        if impl_batch {
-            callbacks.push(batch_receive_nft_msg(
-                sender.clone(),
-                send_from.owner,
-                send_from.token_ids,
-                msg.clone(),
-                code_hash.clone(),
-                contract_human.clone(),
-            )?);
-        //otherwise do a bunch of BatchReceiveNft
-        } else {
-            for token_id in send_from.token_ids.into_iter() {
-                callbacks.push(receive_nft_msg(
-                    send_from.owner.clone(),
-                    token_id,
-                    msg.clone(),
-                    code_hash.clone(),
-                    contract_human.clone(),
-                )?);
-            }
-        }
-    }
-    Ok(callbacks)
 }
 
 // information about how an owner's token inventory has changed
@@ -3583,198 +3307,12 @@ fn update_owner_inventory<S: Storage>(
     Ok(())
 }
 
-/// Returns StdResult<CanonicalAddr>
-///
-/// transfers a token, clears the token's permissions, and returns the previous owner's address
-///
-/// # Arguments
-///
-/// * `deps` - a mutable reference to Extern containing all the contract's external dependencies
-/// * `block` - a reference to the current BlockInfo
-/// * `config` - a mutable reference to the Config
-/// * `sender` - a reference to the message sender address
-/// * `token_id` - token id String of token being transferred
-/// * `recipient` - the recipient's address
-/// * `oper_for` - a mutable reference to a list of owners that gave the sender "all" permission
-/// * `inv_updates` - a mutable reference to the list of token inventories to update
-/// * `memo` - optional memo for the transfer tx
-#[allow(clippy::too_many_arguments)]
-fn transfer_impl<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    block: &BlockInfo,
-    config: &mut Config,
-    sender: &CanonicalAddr,
-    token_id: String,
-    recipient: CanonicalAddr,
-    oper_for: &mut Vec<CanonicalAddr>,
-    inv_updates: &mut Vec<InventoryUpdate>,
-    memo: Option<String>,
-) -> StdResult<CanonicalAddr> {
-    let (mut token, idx) = get_token_if_permitted(
-        deps,
-        block,
-        &token_id,
-        Some(sender),
-        PermissionType::Transfer,
-        oper_for,
-        &config,
-    )?;
-    let old_owner = token.owner;
-    // don't bother processing anything if ownership does not change
-    if old_owner == recipient {
-        return Ok(old_owner);
-    }
-    token.owner = recipient.clone();
-    token.permissions.clear();
-
-    let update_addrs = vec![recipient.clone(), old_owner.clone()];
-    // save updated token info
-    let mut info_store = PrefixedStorage::new(PREFIX_INFOS, &mut deps.storage);
-    json_save(&mut info_store, &idx.to_le_bytes(), &token)?;
-    // log the inventory changes
-    for addr in update_addrs.into_iter() {
-        if let Some(inv) = inv_updates.iter_mut().find(|i| i.owner == addr) {
-            // if updating the recipient's inventory
-            if inv.owner == recipient {
-                inv.retain.insert(idx);
-            // otherwise updating the old owner's inventory
-            } else {
-                inv.retain.remove(&idx);
-                inv.remove.insert(idx);
-            }
-        } else {
-            let owned_store = ReadonlyPrefixedStorage::new(PREFIX_OWNED, &deps.storage);
-            let retain: HashSet<u32> =
-                may_load(&owned_store, addr.as_slice())?.unwrap_or_else(HashSet::new);
-            let mut new_inv = InventoryUpdate {
-                owner: addr,
-                retain,
-                remove: HashSet::new(),
-            };
-            // if updating the recipient's inventory
-            if new_inv.owner == recipient {
-                new_inv.retain.insert(idx);
-            // otherwise updating the old owner's inventory
-            } else {
-                new_inv.retain.remove(&idx);
-                new_inv.remove.insert(idx);
-            }
-            inv_updates.push(new_inv);
-        }
-    }
-
-    let sndr = if old_owner == *sender {
-        None
-    } else {
-        Some(sender.clone())
-    };
-    // store the tx
-    store_transfer(
-        &mut deps.storage,
-        config,
-        block.height,
-        token_id,
-        old_owner.clone(),
-        sndr,
-        recipient,
-        memo,
-    )?;
-    Ok(old_owner)
-}
-
 // list of tokens sent from one previous owner
 pub struct SendFrom {
     // the owner's address
     pub owner: HumanAddr,
     // the tokens that were sent
     pub token_ids: Vec<String>,
-}
-
-/// Returns StdResult<Vec<CosmosMsg>>
-///
-/// transfer or sends a list of tokens and returns a list of ReceiveNft callbacks if applicable
-///
-/// # Arguments
-///
-/// * `deps` - a mutable reference to Extern containing all the contract's external dependencies
-/// * `env` - a reference to the Env of the contract's environment
-/// * `config` - a mutable reference to the Config
-/// * `sender` - a reference to the message sender address
-/// * `transfers` - optional list of transfers to perform
-/// * `sends` - optional list of sends to perform
-fn send_list<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: &Env,
-    config: &mut Config,
-    sender: &CanonicalAddr,
-    transfers: Option<Vec<Transfer>>,
-    sends: Option<Vec<Send>>,
-) -> StdResult<Vec<CosmosMsg>> {
-    let mut messages: Vec<CosmosMsg> = Vec::new();
-    let mut oper_for: Vec<CanonicalAddr> = Vec::new();
-    let mut inv_updates: Vec<InventoryUpdate> = Vec::new();
-    let num_perm_types = PermissionType::ViewOwner.num_types();
-    if let Some(mut xfers) = transfers {
-        for xfer in xfers.drain(..) {
-            let recipient_raw = deps.api.canonical_address(&xfer.recipient)?;
-            for token_id in xfer.token_ids.into_iter() {
-                let _o = transfer_impl(
-                    deps,
-                    &env.block,
-                    config,
-                    sender,
-                    token_id,
-                    recipient_raw.clone(),
-                    &mut oper_for,
-                    &mut inv_updates,
-                    xfer.memo.clone(),
-                )?;
-            }
-        }
-    } else if let Some(mut snds) = sends {
-        let mut receivers = Vec::new();
-        for send in snds.drain(..) {
-            let contract_raw = deps.api.canonical_address(&send.contract)?;
-            let mut send_from_list: Vec<SendFrom> = Vec::new();
-            for token_id in send.token_ids.into_iter() {
-                let owner_raw = transfer_impl(
-                    deps,
-                    &env.block,
-                    config,
-                    sender,
-                    token_id.clone(),
-                    contract_raw.clone(),
-                    &mut oper_for,
-                    &mut inv_updates,
-                    send.memo.clone(),
-                )?;
-                // compile list of all tokens being sent from each owner in this Send
-                let owner = deps.api.human_address(&owner_raw)?;
-                if let Some(sd_fm) = send_from_list.iter_mut().find(|s| s.owner == owner) {
-                    sd_fm.token_ids.push(token_id.clone());
-                } else {
-                    let new_sd_fm = SendFrom {
-                        owner,
-                        token_ids: vec![token_id.clone()],
-                    };
-                    send_from_list.push(new_sd_fm);
-                }
-            }
-            // get BatchReceiveNft and ReceiveNft msgs for all the tokens sent in this Send
-            messages.extend(receiver_callback_msgs(
-                &deps.storage,
-                &send.contract,
-                &contract_raw,
-                send_from_list,
-                &send.msg,
-                &env.message.sender,
-                &mut receivers,
-            )?);
-        }
-    }
-    save(&mut deps.storage, CONFIG_KEY, &config)?;
-    update_owner_inventory(&mut deps.storage, &inv_updates, num_perm_types)?;
-    Ok(messages)
 }
 
 /// Returns StdResult<()>
@@ -3794,23 +3332,42 @@ fn burn_list<S: Storage, A: Api, Q: Querier>(
     config: &mut Config,
     sender: &CanonicalAddr,
     burns: &mut Vec<Burn>,
-) -> StdResult<()> {
-    let mut oper_for: Vec<CanonicalAddr> = Vec::new();
+) -> StdResult<Vec<TokenData>> {
     let mut inv_updates: Vec<InventoryUpdate> = Vec::new();
     let num_perm_types = PermissionType::ViewOwner.num_types();
     let mut tokens: HashSet<String> =
         may_load(&deps.storage, TOKENS_KEY)?.unwrap_or_else(HashSet::new);
+    let mut retrieved_data: Vec<TokenData> = vec![];
     for burn in burns.drain(..) {
         for token_id in burn.token_ids.into_iter() {
             let (token, idx) = get_token_if_permitted(
                 deps,
-                block,
                 &token_id,
-                Some(sender),
-                PermissionType::Transfer,
-                &mut oper_for,
                 &config,
             )?;
+
+            let public_metadata = get_public_metadata(
+                &deps.storage,
+                &token_id,
+            ).unwrap();
+
+            let mut token_data = TokenData::from_public_metadata(
+                &token_id,
+                public_metadata,
+            );
+
+            let private_metadata = get_private_metadata(
+                &deps.storage,
+                &token_id,
+            );
+
+            if private_metadata.is_err() {
+                panic!("{}", extract_error_msg(private_metadata))
+            }
+
+            token_data.update_with_private_metadata(private_metadata.unwrap());
+            retrieved_data.push(token_data);
+
             // log the inventory change
             if let Some(inv) = inv_updates.iter_mut().find(|i| i.owner == token.owner) {
                 inv.retain.remove(&idx);
@@ -3863,7 +3420,7 @@ fn burn_list<S: Storage, A: Api, Q: Querier>(
     save(&mut deps.storage, CONFIG_KEY, &config)?;
     save(&mut deps.storage, TOKENS_KEY, &tokens)?;
     update_owner_inventory(&mut deps.storage, &inv_updates, num_perm_types)?;
-    Ok(())
+    Ok(retrieved_data)
 }
 
 // an owner and their list of tokens

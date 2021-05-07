@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
-    use crate::msg::{QueryMsg, QueryAnswer, HandleMsg};
+    use crate::msg::{QueryMsg, HandleMsg};
     use crate::contract::{query, handle};
-    use cosmwasm_std::{from_binary, HumanAddr};
+    use cosmwasm_std::{HumanAddr};
     use crate::token::Metadata;
     use cosmwasm_std::testing::mock_env;
 
@@ -23,8 +23,8 @@ mod tests {
             token_id: "NFT1".to_string(),
         };
         let query_result = query(&deps, query_msg);
-        let error = extract_error_msg(query_result);
-        assert!(error.contains("Token ID: NFT1 not found"));
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
 
         let (init_result, mut deps) =
             init_helper_with_config(false, false, false, false, true, false, true);
@@ -39,19 +39,9 @@ mod tests {
             token_id: "NFT1".to_string(),
         };
         let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::NftInfo {
-                name,
-                description,
-                image,
-            } => {
-                assert!(name.is_none());
-                assert!(description.is_none());
-                assert!(image.is_none());
-            }
-            _ => panic!("unexpected"),
-        }
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
+
         let alice = HumanAddr("alice".to_string());
         let public_meta = Metadata {
             name: Some("Name1".to_string()),
@@ -73,18 +63,7 @@ mod tests {
             token_id: "NFT1".to_string(),
         };
         let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::NftInfo {
-                name,
-                description,
-                image,
-            } => {
-                assert_eq!(name, public_meta.name);
-                assert_eq!(description, public_meta.description);
-                assert_eq!(image, public_meta.image);
-            }
-            _ => panic!("unexpected"),
-        }
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
     }
 }

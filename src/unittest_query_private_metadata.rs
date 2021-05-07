@@ -2,7 +2,7 @@
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg};
     use cosmwasm_std::{HumanAddr, from_binary};
-    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, QueryAnswer, ViewerInfo, HandleAnswer};
+    use crate::msg::{HandleMsg, AccessLevel, QueryMsg, ViewerInfo, HandleAnswer};
     use crate::contract::{handle, query};
     use cosmwasm_std::testing::mock_env;
     use crate::token::Metadata;
@@ -59,19 +59,8 @@ mod tests {
             viewer: None,
         };
         let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::PrivateMetadata {
-                name,
-                description,
-                image,
-            } => {
-                assert_eq!(name, private_meta.name);
-                assert_eq!(description, private_meta.description);
-                assert_eq!(image, private_meta.image);
-            }
-            _ => panic!("unexpected"),
-        }
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
 
         let handle_msg = HandleMsg::SetGlobalApproval {
             token_id: Some("NFT1".to_string()),
@@ -88,19 +77,8 @@ mod tests {
             viewer: None,
         };
         let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::PrivateMetadata {
-                name,
-                description,
-                image,
-            } => {
-                assert_eq!(name, private_meta.name);
-                assert_eq!(description, private_meta.description);
-                assert_eq!(image, private_meta.image);
-            }
-            _ => panic!("unexpected"),
-        }
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
 
         let (init_result, mut deps) =
             init_helper_with_config(false, false, true, false, true, false, true);
@@ -158,10 +136,9 @@ mod tests {
             }),
         };
         let query_result = query(&deps, query_msg);
-        let error = extract_error_msg(query_result);
-        assert!(error.contains(
-            "Sealed metadata must be unwrapped by calling Reveal before it can be viewed"
-        ));
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
+
         let handle_msg = HandleMsg::Reveal {
             token_id: "NFT1".to_string(),
             padding: None,
@@ -178,19 +155,8 @@ mod tests {
             }),
         };
         let query_result = query(&deps, query_msg);
-        let query_answer: QueryAnswer = from_binary(&query_result.unwrap()).unwrap();
-        match query_answer {
-            QueryAnswer::PrivateMetadata {
-                name,
-                description,
-                image,
-            } => {
-                assert!(name.is_none());
-                assert!(description.is_none());
-                assert!(image.is_none());
-            }
-            _ => panic!("unexpected"),
-        }
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
 
         // test viewer not permitted
         let query_msg = QueryMsg::PrivateMetadata {
@@ -201,7 +167,7 @@ mod tests {
             }),
         };
         let query_result = query(&deps, query_msg);
-        let error = extract_error_msg(query_result);
-        assert!(error.contains("You are not authorized to perform this action on token NFT1"));
+        let err = extract_error_msg(query_result);
+        assert_eq!(err, "Token must be burned to retrieve metadata.");
     }
 }
