@@ -78,6 +78,7 @@ pub struct Config {
     /// is the token's owner permitted to update the token's metadata
     pub owner_may_update_metadata: bool,
     /// is burn enabled
+    //TODO Remove
     pub burn_is_enabled: bool,
 }
 
@@ -500,7 +501,7 @@ pub fn json_save<T: Serialize, S: Storage>(
 }
 
 /// Returns StdResult<T> from retrieving the item with the specified key using Json
-/// (de)serialization because bincode2 annoyingly uses a float op when deserializing an enum.  
+/// (de)serialization because bincode2 annoyingly uses a float op when deserializing an enum.
 /// Returns a StdError::NotFound if there is no item with that key
 ///
 /// # Arguments

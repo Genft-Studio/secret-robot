@@ -55,7 +55,7 @@ pub fn mint_nft3_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>)
     assert!(result.is_ok());
 }
 
-pub fn mint_nft4_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>) {
+pub fn _mint_nft4_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>) {
     let handle_msg = HandleMsg::MintNft {
         token_id: Some("NFT4".to_string()),
         owner: Some(HumanAddr("alice".to_string())),
@@ -72,7 +72,7 @@ pub fn mint_nft4_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>)
     assert!(result.is_ok());
 }
 
-pub fn mint_nft5_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>) {
+pub fn _mint_nft5_alice(mut deps: &mut Extern<MockStorage, MockApi, MockQuerier>) {
     let handle_msg = HandleMsg::MintNft {
         token_id: Some("NFT5".to_string()),
         owner: Some(HumanAddr("alice".to_string())),

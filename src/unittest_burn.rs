@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
     use crate::unittest_helpers::{init_helper_with_config, extract_error_msg, set_contract_status};
-    use crate::msg::{HandleMsg, ContractStatus, TxAction};
-    use cosmwasm_std::{HumanAddr, Env, BlockInfo, MessageInfo, Api};
+    use crate::msg::{HandleMsg, ContractStatus, TxAction, HandleAnswer};
+    use cosmwasm_std::{HumanAddr, Env, BlockInfo, MessageInfo, Api, from_binary};
     use crate::token::{Metadata, Token};
     use crate::contract::{handle};
     use cosmwasm_std::testing::{mock_env, MOCK_CONTRACT_ADDR};
@@ -353,7 +353,16 @@ mod tests {
             },
             handle_msg,
         );
-        assert!(handle_result.is_ok());
+
+        let answer: HandleAnswer = from_binary(&handle_result.unwrap().data.unwrap()).unwrap();
+        match answer {
+            HandleAnswer::BurnNft { secret } => {
+                assert_eq!(secret.description.unwrap(), "metadata");
+                assert_eq!(secret.image.unwrap(), "uri");
+                assert_eq!(secret.name.unwrap(), "MyNFT")
+            },
+            _ => panic!("NOPE"),
+        };
 
         // confirm token was removed from the maps
         let tokens: HashSet<String> = load(&deps.storage, TOKENS_KEY).unwrap();
@@ -400,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn test_burn_expired_approval() {
+    fn test_burn_expired_all_approval_permission() {
         let (init_result, mut deps) =
             init_helper_with_config(false, false, false, false, false, false, true);
         assert!(
@@ -414,10 +423,14 @@ mod tests {
             owner: Some(HumanAddr("alice".to_string())),
             private_metadata: Some(Metadata {
                 name: Some("MyNFT".to_string()),
-                description: Some("metadata".to_string()),
+                description: None,
                 image: Some("uri".to_string()),
             }),
-            public_metadata: None,
+            public_metadata: Some(Metadata {
+                name: Some("MyPublicNFT".to_string()),
+                description: Some("public metadata".to_string()),
+                image: Some("public uri".to_string()),
+            }),
             memo: Some("Mint it baby!".to_string()),
             padding: None,
         };
@@ -438,7 +451,7 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let handle_result = handle(
+        let result = handle(
             &mut deps,
             Env {
                 block: BlockInfo {
@@ -458,12 +471,19 @@ mod tests {
             },
             handle_msg,
         );
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Access to all tokens of alice has expired"));
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        match answer {
+            HandleAnswer::BurnNft { secret } => {
+                assert_eq!(secret.description.unwrap(), "public metadata");
+                assert_eq!(secret.image.unwrap(), "uri");
+                assert_eq!(secret.name.unwrap(), "MyNFT")
+            },
+            _ => panic!("NOPE"),
+        };
     }
 
     #[test]
-    fn test_burn_of_expired_token() {
+    fn test_burn_with_expired_approval() {
         let (init_result, mut deps) =
             init_helper_with_config(false, false, false, false, false, false, true);
         assert!(
@@ -475,19 +495,19 @@ mod tests {
         let handle_msg = HandleMsg::MintNft {
             token_id: Some("MyNFT".to_string()),
             owner: Some(HumanAddr("alice".to_string())),
-            private_metadata: Some(Metadata {
+            private_metadata: None,
+            public_metadata: Some(Metadata {
                 name: Some("MyNFT".to_string()),
                 description: Some("metadata".to_string()),
                 image: Some("uri".to_string()),
             }),
-            public_metadata: None,
             memo: Some("Mint it baby!".to_string()),
             padding: None,
         };
         let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
         assert!(handle_result.is_ok());
 
-        // test expired token approval
+        // test expired approval permission
         let handle_msg = HandleMsg::Approve {
             spender: HumanAddr("charlie".to_string()),
             token_id: "MyNFT".to_string(),
@@ -502,7 +522,7 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let handle_result = handle(
+        let result = handle(
             &mut deps,
             Env {
                 block: BlockInfo {
@@ -522,8 +542,15 @@ mod tests {
             },
             handle_msg,
         );
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Access to token MyNFT has expired"));
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        match answer {
+            HandleAnswer::BurnNft { secret } => {
+                assert_eq!(secret.description.unwrap(), "metadata");
+                assert_eq!(secret.image.unwrap(), "uri");
+                assert_eq!(secret.name.unwrap(), "MyNFT")
+            },
+            _ => panic!("NOPE"),
+        };
     }
 
     #[test]
@@ -540,7 +567,7 @@ mod tests {
             token_id: Some("MyNFT".to_string()),
             owner: Some(HumanAddr("alice".to_string())),
             private_metadata: Some(Metadata {
-                name: Some("MyNFT".to_string()),
+                name: None,
                 description: Some("privmetadata".to_string()),
                 image: Some("privuri".to_string()),
             }),
@@ -561,9 +588,16 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let handle_result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("You are not authorized to perform this action on token MyNFT"));
+        let result = handle(&mut deps, mock_env("admin", &[]), handle_msg);
+        let answer: HandleAnswer = from_binary(&result.unwrap().data.unwrap()).unwrap();
+        match answer {
+            HandleAnswer::BurnNft { secret } => {
+                assert_eq!(secret.description.unwrap(), "privmetadata");
+                assert_eq!(secret.image.unwrap(), "privuri");
+                assert_eq!(secret.name.unwrap(), "MyNFT")
+            },
+            _ => panic!("NOPE"),
+        };
     }
 
     #[test]
@@ -609,6 +643,7 @@ mod tests {
 
     #[test]
     fn test_burn_when_disabled() {
+        // enable_burn is ignored
         let (init_result, mut deps) =
             init_helper_with_config(false, false, false, false, false, false, false);
         assert!(
@@ -637,9 +672,8 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Burn functionality is not enabled for this token"));
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        assert!(result.is_ok());
     }
 
     // test burn when status prevents it

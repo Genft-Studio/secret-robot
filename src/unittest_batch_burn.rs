@@ -39,6 +39,7 @@ mod tests {
 
     #[test]
     fn test_batch_burn_when_disabled_for_token() {
+        // enable_burn is ignored
         let (init_result, mut deps) =
             init_helper_with_config(false, false, false, false, false, false, false);
         assert!(
@@ -54,9 +55,8 @@ mod tests {
             memo: None,
             padding: None,
         };
-        let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("Burn functionality is not enabled for this token"));
+        let result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -110,51 +110,6 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_burn_unauthorized() {
-        let (init_result, mut deps) =
-            init_helper_with_config(false, false, false, false, false, false, true);
-        assert!(
-            init_result.is_ok(),
-            "Init failed: {}",
-            init_result.err().unwrap()
-        );
-
-        mint_nft1_alice_grant_bob_charlie(&mut deps);
-        mint_nft2_alice_grant_charlie(&mut deps);
-        mint_nft3_alice_grant_bob(&mut deps);
-        mint_nft4_bob_grant_alice(&mut deps);
-        mint_nft5_bob_grant_alice_charlie(&mut deps);
-        mint_nft6_bob_grant_alice(&mut deps);
-        mint_nft7_charlie_grant_alice(&mut deps);
-        mint_nft8_charlie(&mut deps);
-        grant_all(&mut deps, "charlie", "bob");
-
-        // test bob burning a list, but one is not authorized
-        let burns = vec![
-            Burn {
-                token_ids: vec![
-                    "NFT1".to_string(),
-                    "NFT3".to_string(),
-                    "NFT6".to_string(),
-                    "NFT2".to_string(),
-                ],
-                memo: None,
-            },
-            Burn {
-                token_ids: vec!["NFT8".to_string()],
-                memo: Some("Phew!".to_string()),
-            },
-        ];
-        let handle_msg = HandleMsg::BatchBurnNft {
-            burns,
-            padding: None,
-        };
-        let handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
-        let error = extract_error_msg(handle_result);
-        assert!(error.contains("You are not authorized to perform this action on token NFT2"));
-    }
-
-    #[test]
     fn test_batch_burn() {
         // set up for batch burn test
         let (init_result, mut deps) =
@@ -192,11 +147,23 @@ mod tests {
                 memo: Some("Phew!".to_string()),
             },
         ];
+        let reveal_msg = HandleMsg::Reveal {
+            token_id: "NFT3".to_string(),
+            padding: None
+        };
+        let result = handle(
+            &mut deps,
+            mock_env("alice", &[]),
+            reveal_msg
+        );
+        assert!(result.is_ok());
+
         let handle_msg = HandleMsg::BatchBurnNft {
             burns,
             padding: None,
         };
-        let _handle_result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        let result = handle(&mut deps, mock_env("bob", &[]), handle_msg);
+        assert!(result.is_ok());
 
         let view_owner_idx = PermissionType::ViewOwner.to_usize();
         let view_meta_idx = PermissionType::ViewMetadata.to_usize();

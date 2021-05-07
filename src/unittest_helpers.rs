@@ -201,7 +201,11 @@ pub fn mint_nft3_alice_grant_bob(mut deps: &mut Extern<MockStorage, MockApi, Moc
         memo: None,
         padding: None,
     };
-    let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+    let handle_result = handle(
+        &mut deps,
+        mock_env("alice", &[]),
+        handle_msg
+    );
     assert!(handle_result.is_ok());
 
     let handle_msg = HandleMsg::SetWhitelistedApproval {
@@ -213,7 +217,11 @@ pub fn mint_nft3_alice_grant_bob(mut deps: &mut Extern<MockStorage, MockApi, Moc
         expires: None,
         padding: None,
     };
-    let handle_result = handle(&mut deps, mock_env("alice", &[]), handle_msg);
+    let handle_result = handle(
+        &mut deps,
+        mock_env("alice", &[]),
+        handle_msg
+    );
     assert!(handle_result.is_ok());
 }
 

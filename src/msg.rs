@@ -462,7 +462,7 @@ pub enum HandleAnswer {
         status: ResponseStatus,
     },
     BurnNft {
-        status: ResponseStatus,
+        secret: TokenData,
     },
     BatchBurnNft {
         status: ResponseStatus,
@@ -719,6 +719,50 @@ pub struct Cw721OwnerOfResponse {
     pub owner: Option<HumanAddr>,
     /// list of addresses approved to transfer this token
     pub approvals: Vec<Cw721Approval>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TokenData {
+    pub token_id: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub image: Option<String>,
+}
+
+impl TokenData {
+    pub fn from_public_metadata(token_id: &String, m: QueryAnswer) -> TokenData {
+        match m {
+            QueryAnswer::NftInfo { name, description, image } => {
+                TokenData {
+                    token_id: token_id.clone(),
+                    name: name.clone(),
+                    description: description.clone(),
+                    image: image.clone(),
+                }
+            }
+            _ => {
+                panic!()
+            }
+        }
+    }
+    pub fn update_with_private_metadata(&mut self, d: QueryAnswer) {
+        match d {
+            QueryAnswer::PrivateMetadata { name, description, image } => {
+                if !name.is_none() {
+                    self.name = name.clone();
+                }
+                if !description.is_none() {
+                    self.description = description.clone();
+                }
+                if !image.is_none() {
+                    self.image = image.clone();
+                }
+            }
+            _ => {
+                panic!()
+            }
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
